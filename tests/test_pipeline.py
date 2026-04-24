@@ -86,7 +86,7 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     assert any("Prepared 3 chunk(s) from 1 document(s)." == message for message in persisted)
     assert any("Completed batch 3/3; tracking 1 topic(s)." == message for message in persisted)
     assert any("marked the current topic cluster as complete" in message for message in persisted)
-    assert any("Finished digestion with 1 skill/topic file(s)." == message for message in persisted)
+    assert any("Finished digestion with 1 skill file(s)." == message for message in persisted)
     assert any("Generated " in message and "architecture.md" in message for message in persisted)
 
 

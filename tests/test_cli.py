@@ -49,12 +49,12 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "Wrote 1 skill/topic files plus INDEX.md" in captured.out
+    assert "Wrote 1 skill files plus INDEX.md" in captured.out
     assert (output_dir / "summary.md").exists()
     assert "Using provider openai with model fake-model." in captured.err
     assert "Loaded notes.txt with 1 section(s)." in captured.err
     assert "Completed batch 1/1; tracking 1 topic(s)." in captured.err
-    assert "Finished digestion with 1 skill/topic file(s)." in captured.err
+    assert "Finished digestion with 1 skill file(s)." in captured.err
     assert "Generated" in captured.err
 
 

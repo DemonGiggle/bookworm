@@ -106,7 +106,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     result = digester.digest_paths(args.inputs, args.output_dir)
     print(
-        "Wrote {count} skill/topic files plus INDEX.md to {output_dir}".format(
+        "Wrote {count} skill files plus INDEX.md to {output_dir}".format(
             count=len(result.topics),
             output_dir=args.output_dir,
         )

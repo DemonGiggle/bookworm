@@ -9,7 +9,7 @@ Bookworm Digester is a Python package that converts heterogeneous document sourc
 3. **Chunking** converts document sections into bounded units for incremental LLM digestion.
 4. **Digest orchestration** loops through chunk batches, updating a topic map and asking the provider whether the currently visible topics likely continue into adjacent chunks.
 5. **Provider abstraction** isolates prompt construction from LLM transport details.
-6. **Artifact generation** writes one markdown file per discovered skill/topic plus a navigational `INDEX.md`.
+6. **Artifact generation** writes one markdown file per discovered skill file plus a navigational `INDEX.md`.
 
 This design keeps the core workflow stable while allowing new source types and new LLM backends to be added without rewriting the pipeline.
 
@@ -109,7 +109,7 @@ Chunks are designed to be provider-facing payloads that remain small enough for 
 
 ### 4.5 TopicDigest
 
-`TopicDigest` is the accumulated section-like skill/topic output:
+`TopicDigest` is the accumulated section-like skill-file output:
 
 - `slug`
 - `title`
@@ -333,7 +333,7 @@ Digest response shape:
       ]
     }
   ],
- "should_continue": true,
+  "should_continue": true,
   "rationale": "Need more context from adjacent sections for the current visible topic."
 }
 ```
@@ -437,7 +437,7 @@ Filename convention:
 - input source list
 - final stop reason from the orchestrator
 
-This file is the navigation layer meant to help another LLM or human quickly identify which skill/topic files matter.
+This file is the navigation layer meant to help another LLM or human quickly identify which skill files matter.
 
 ## 11. Public Interfaces
 

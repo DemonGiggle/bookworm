@@ -45,7 +45,7 @@ class DocumentDigester:
             progress_reporter=self.progress_reporter,
         )
         self.progress_reporter.persist(
-            "Finished digestion with {count} skill/topic file(s).".format(count=len(result.topics))
+            "Finished digestion with {count} skill file(s).".format(count=len(result.topics))
         )
         self.progress_reporter.clear()
         return result

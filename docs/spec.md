@@ -53,11 +53,11 @@ Bookworm Digester solves this by converting source material into:
 
 ### 5.1 Engineering Agents
 
-An engineering agent should be able to read `INDEX.md`, identify relevant skills/topics, then load only the linked markdown files needed for a coding task.
+An engineering agent should be able to read `INDEX.md`, identify relevant skill files, then load only the linked markdown files needed for a coding task.
 
 ### 5.2 Human Researchers or Analysts
 
-A human should be able to scan the index, open the most relevant skill/topic digests, and avoid reading full source files unless provenance indicates a deeper check is necessary.
+A human should be able to scan the index, open the most relevant skill files, and avoid reading full source files unless provenance indicates a deeper check is necessary.
 
 ### 5.3 Automation Pipelines
 
@@ -88,7 +88,7 @@ Other Python code should be able to call the library API to digest files as part
 
 For each successful digestion run, the system must write:
 
-1. **one markdown file per discovered section-like topic / skill**
+1. **one markdown file per discovered section-like skill**
 2. **`INDEX.md`**
 
 ### 7.2 Topic File Requirements
@@ -142,7 +142,7 @@ For each batch, the provider must return:
 - whether processing should continue
 - rationale
 
-The system must honor early stop requests only after a configurable minimum number of batches.
+The system may delay acting on provider completion hints until a configurable minimum number of batches has been processed.
 `should_continue` applies to the currently visible topics, not to the entire remaining corpus. If chunks remain, the system must continue digesting them unless `max_batches` has been reached.
 
 ### FR-6 Finalize Topics for Export
@@ -309,7 +309,7 @@ The system is considered acceptable when it can:
 3. Produce one or more chunks
 4. Call the provider through the abstract interface
 5. Accumulate at least one topic
-6. Write skill/topic markdown files
+6. Write skill-file markdown outputs
 7. Write `INDEX.md`
 8. Expose the same core behavior through CLI and library API
 

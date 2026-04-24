@@ -2,7 +2,7 @@
 
 Bookworm Digester ingests source documents, incrementally digests them through an LLM-guided loop, and emits section-like skill files plus an `INDEX.md` for downstream human or agent workflows.
 
-Each output file is meant to behave like a reusable skill/topic for another agent: focused enough to stand alone, but still traceable back to the source material.
+Each output file is meant to behave like a reusable skill file for another agent: focused enough to stand alone, but still traceable back to the source material.
 
 ## Supported inputs
 
