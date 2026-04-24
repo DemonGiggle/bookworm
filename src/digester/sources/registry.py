@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 from ..core.models import SourceDocument
+from ..utils.progress import NoOpProgressReporter, ProgressReporter, file_label
 from .base import SourceAdapter
 from .docx import DocxAdapter
 from .pdf import PdfAdapter
@@ -24,14 +25,38 @@ class SourceRegistry:
             SpreadsheetAdapter(),
         ]
 
-    def load_paths(self, paths: Iterable[Path]) -> List[SourceDocument]:
+    def load_paths(
+        self,
+        paths: Iterable[Path],
+        progress_reporter: Optional[ProgressReporter] = None,
+    ) -> List[SourceDocument]:
+        reporter = progress_reporter or NoOpProgressReporter()
         documents: List[SourceDocument] = []
         for path in paths:
             if path.is_dir():
-                documents.extend(self.load_paths(sorted(child for child in path.iterdir() if child.is_file())))
+                reporter.persist("Scanning directory {name}.".format(name=file_label(path)))
+                documents.extend(
+                    self.load_paths(
+                        sorted(child for child in path.iterdir() if child.is_file()),
+                        progress_reporter=reporter,
+                    )
+                )
                 continue
             adapter = self._resolve_adapter(path)
-            documents.append(adapter.load(path))
+            reporter.update(
+                "Loading {name} with {adapter}.".format(
+                    name=file_label(path),
+                    adapter=adapter.__class__.__name__,
+                )
+            )
+            document = adapter.load(path)
+            documents.append(document)
+            reporter.persist(
+                "Loaded {name} with {sections} section(s).".format(
+                    name=file_label(path),
+                    sections=len(document.sections),
+                )
+            )
         return documents
 
     def _resolve_adapter(self, path: Path) -> SourceAdapter:

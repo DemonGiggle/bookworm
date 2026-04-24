@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
+from ..utils.progress import NoOpProgressReporter, ProgressReporter, file_label
 from .models import DigestResult, TopicDigest
 
 
@@ -62,15 +63,26 @@ def _render_index_markdown(result: DigestResult) -> str:
 
 
 class MarkdownArtifactWriter:
-    def write(self, result: DigestResult, output_dir: Path) -> Dict[str, Path]:
+    def write(
+        self,
+        result: DigestResult,
+        output_dir: Path,
+        progress_reporter: Optional[ProgressReporter] = None,
+    ) -> Dict[str, Path]:
+        reporter = progress_reporter or NoOpProgressReporter()
+        reporter.persist("Writing artifacts to {path}.".format(path=output_dir))
         output_dir.mkdir(parents=True, exist_ok=True)
         artifact_paths: Dict[str, Path] = {}
         for topic in result.topics:
             topic_path = output_dir / "{slug}.md".format(slug=topic.slug)
+            reporter.update("Writing {name}.".format(name=file_label(topic_path)))
             topic_path.write_text(_render_topic_markdown(topic), encoding="utf-8")
             artifact_paths[topic.slug] = topic_path
+            reporter.persist("Generated {path}.".format(path=topic_path))
         index_path = output_dir / "INDEX.md"
+        reporter.update("Writing {name}.".format(name=file_label(index_path)))
         index_path.write_text(_render_index_markdown(result), encoding="utf-8")
         artifact_paths["INDEX"] = index_path
+        reporter.persist("Generated {path}.".format(path=index_path))
         result.artifact_paths = artifact_paths
         return artifact_paths

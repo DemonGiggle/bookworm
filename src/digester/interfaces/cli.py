@@ -6,11 +6,12 @@ from typing import Optional, Sequence
 
 from ..core import DigestConfig
 from ..providers import ProviderSettings, create_provider
+from ..utils.progress import ConsoleProgressReporter
 from .api import DocumentDigester
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="bookworm-digest")
+    parser = argparse.ArgumentParser(prog="bookworm")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     digest_parser = subparsers.add_parser("digest", help="Digest source files into markdown artifacts.")
@@ -53,12 +54,27 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _provider_message(args: argparse.Namespace) -> str:
+    if args.provider_kind == "ollama":
+        return "Using provider ollama ({host}:{port}) with model {model}.".format(
+            host=args.ollama_host,
+            port=args.ollama_port,
+            model=args.model,
+        )
+    return "Using provider {kind} with model {model}.".format(
+        kind=args.provider_kind,
+        model=args.model,
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.command != "digest":
         parser.error("Unknown command.")
 
+    reporter = ConsoleProgressReporter()
+    reporter.persist(_provider_message(args))
     provider = create_provider(
         ProviderSettings(
             provider_kind=args.provider_kind,
@@ -79,10 +95,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             max_batches=args.max_batches,
             max_topics=args.max_topics,
         ),
+        progress_reporter=reporter,
     )
     result = digester.digest_paths(args.inputs, args.output_dir)
-    print("Wrote {count} topic files plus INDEX.md to {output_dir}".format(
-        count=len(result.topics),
-        output_dir=args.output_dir,
-    ))
+    print(
+        "Wrote {count} topic files plus INDEX.md to {output_dir}".format(
+            count=len(result.topics),
+            output_dir=args.output_dir,
+        )
+    )
     return 0

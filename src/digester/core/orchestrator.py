@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from ..providers.base import LLMProvider
+from ..utils.progress import NoOpProgressReporter, ProgressReporter, file_label
 from .chunking import chunk_documents
 from .models import (
     DigestBatchRequest,
@@ -16,14 +17,30 @@ from .models import (
 
 
 class DigestOrchestrator:
-    def __init__(self, provider: LLMProvider, config: Optional[DigestConfig] = None) -> None:
+    def __init__(
+        self,
+        provider: LLMProvider,
+        config: Optional[DigestConfig] = None,
+        progress_reporter: Optional[ProgressReporter] = None,
+    ) -> None:
         self.provider = provider
         self.config = config or DigestConfig()
+        self.progress_reporter = progress_reporter or NoOpProgressReporter()
 
     def run(self, documents: List[SourceDocument]) -> DigestResult:
+        self.progress_reporter.update(
+            "Chunking {count} loaded document(s).".format(count=len(documents))
+        )
         chunks = chunk_documents(documents, max_chunk_chars=self.config.max_chunk_chars)
         if not chunks:
             raise ValueError("No extractable text was found in the supplied inputs.")
+
+        self.progress_reporter.persist(
+            "Prepared {chunks} chunk(s) from {documents} document(s).".format(
+                chunks=len(chunks),
+                documents=len(documents),
+            )
+        )
 
         topic_map: Dict[str, TopicDigest] = {}
         stop_reason = "Processed all available chunks."
@@ -38,6 +55,14 @@ class DigestOrchestrator:
             if not chunk_batch:
                 break
             current_topics = ensure_topics_limited(list(topic_map.values()), self.config.max_topics)
+            batch_files = sorted({file_label(chunk.source_path) for chunk in chunk_batch})
+            self.progress_reporter.update(
+                "Digesting batch {current}/{total} for {files}.".format(
+                    current=batch_index + 1,
+                    total=total_batches,
+                    files=", ".join(batch_files),
+                )
+            )
             request = DigestBatchRequest(
                 config=self.config,
                 batch_number=batch_index + 1,
@@ -53,19 +78,37 @@ class DigestOrchestrator:
                     continue
                 existing.merge(update)
                 existing.summary = collapse_topic_summary(existing.summary)
+            self.progress_reporter.persist(
+                "Completed batch {current}/{total}; tracking {topics} topic(s).".format(
+                    current=batch_index + 1,
+                    total=total_batches,
+                    topics=len(topic_map),
+                )
+            )
             if (
                 not decision.should_continue
                 and batch_index + 1 >= self.config.minimum_batches_before_stop
             ):
                 stop_reason = decision.rationale or "Provider reported topic coverage was sufficient."
+                self.progress_reporter.persist(
+                    "Stopping after batch {current}/{total}: {reason}".format(
+                        current=batch_index + 1,
+                        total=total_batches,
+                        reason=stop_reason,
+                    )
+                )
                 break
 
+        self.progress_reporter.update("Finalizing topic digests.")
         topics = ensure_topics_limited(
             self.provider.finalize_topics(list(topic_map.values())),
             self.config.max_topics,
         )
         if not topics:
             raise ValueError("The provider returned no topics for the supplied corpus.")
+        self.progress_reporter.persist(
+            "Finalized {count} topic digest(s).".format(count=len(topics))
+        )
         return DigestResult(
             documents=documents,
             chunks=chunks,

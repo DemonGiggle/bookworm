@@ -31,6 +31,20 @@ class FakeProvider(LLMProvider):
         return topics
 
 
+class RecordingReporter:
+    def __init__(self) -> None:
+        self.messages = []
+
+    def update(self, message: str) -> None:
+        self.messages.append(("update", message))
+
+    def persist(self, message: str) -> None:
+        self.messages.append(("persist", message))
+
+    def clear(self) -> None:
+        self.messages.append(("clear", ""))
+
+
 def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     input_path = tmp_path / "source.txt"
     input_path.write_text(
@@ -40,13 +54,19 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     output_dir = tmp_path / "out"
+    reporter = RecordingReporter()
 
     result = DocumentDigester(
         provider=FakeProvider(),
         config=DigestConfig(max_chunk_chars=70, batch_size=1, minimum_batches_before_stop=2),
+        progress_reporter=reporter,
     ).digest_paths([input_path], output_dir)
 
     assert (output_dir / "architecture.md").exists()
     assert (output_dir / "INDEX.md").exists()
     assert "Architecture" in (output_dir / "INDEX.md").read_text(encoding="utf-8")
     assert result.stop_reason == "Topic coverage is sufficient after two batches."
+    persisted = [message for kind, message in reporter.messages if kind == "persist"]
+    assert any("Loaded source.txt with 1 section(s)." == message for message in persisted)
+    assert any("Prepared 3 chunk(s) from 1 document(s)." == message for message in persisted)
+    assert any("Generated " in message and "architecture.md" in message for message in persisted)

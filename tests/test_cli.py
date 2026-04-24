@@ -51,6 +51,10 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
     assert exit_code == 0
     assert "INDEX.md" in captured.out
     assert (output_dir / "summary.md").exists()
+    assert "Using provider openai with model fake-model." in captured.err
+    assert "Loaded notes.txt with 1 section(s)." in captured.err
+    assert "Completed batch 1/1; tracking 1 topic(s)." in captured.err
+    assert "Generated" in captured.err
 
 
 def test_cli_passes_ollama_host_and_port(monkeypatch, tmp_path: Path, capsys) -> None:
@@ -84,10 +88,11 @@ def test_cli_passes_ollama_host_and_port(monkeypatch, tmp_path: Path, capsys) ->
         ]
     )
 
-    capsys.readouterr()
+    captured = capsys.readouterr()
     assert exit_code == 0
     assert seen == {
         "provider_kind": "ollama",
         "ollama_host": "192.168.1.10",
         "ollama_port": 11555,
     }
+    assert "Using provider ollama (192.168.1.10:11555) with model llama3.1." in captured.err
