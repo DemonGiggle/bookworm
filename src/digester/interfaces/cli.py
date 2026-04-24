@@ -50,7 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
     digest_parser.add_argument("--batch-size", type=int, default=2)
     digest_parser.add_argument("--minimum-batches-before-stop", type=int, default=2)
     digest_parser.add_argument("--max-batches", type=int, default=50)
-    digest_parser.add_argument("--max-topics", type=int, default=12)
+    digest_parser.add_argument(
+        "--max-active-topics",
+        "--max-topics",
+        dest="max_active_topics",
+        type=int,
+        default=12,
+        help="Maximum number of recent section-like topics to include in each provider prompt.",
+    )
     return parser
 
 
@@ -93,13 +100,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             batch_size=args.batch_size,
             minimum_batches_before_stop=args.minimum_batches_before_stop,
             max_batches=args.max_batches,
-            max_topics=args.max_topics,
+            max_active_topics=args.max_active_topics,
         ),
         progress_reporter=reporter,
     )
     result = digester.digest_paths(args.inputs, args.output_dir)
     print(
-        "Wrote {count} topic files plus INDEX.md to {output_dir}".format(
+        "Wrote {count} skill/topic files plus INDEX.md to {output_dir}".format(
             count=len(result.topics),
             output_dir=args.output_dir,
         )

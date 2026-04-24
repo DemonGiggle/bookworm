@@ -2,7 +2,7 @@
 
 ## 1. Product Definition
 
-Bookworm Digester is a document digestion system that ingests heterogeneous files, progressively reads their content through an LLM-guided loop, and emits a compact set of markdown files plus a final `INDEX.md`. The output is optimized for two audiences:
+Bookworm Digester is a document digestion system that ingests heterogeneous files, progressively reads their content through an LLM-guided loop, and emits a corpus-sized set of markdown skill files plus a final `INDEX.md`. The output is optimized for two audiences:
 
 1. **humans** who need a fast map of the source material
 2. **downstream LLM agents** that need high-signal context without paying to reread the original corpus
@@ -20,7 +20,7 @@ Raw documents are expensive for people and LLMs to consume:
 
 Bookworm Digester solves this by converting source material into:
 
-- a small set of **topic-centric markdown digests**
+- a set of **section-like markdown skill files**
 - a single **`INDEX.md`** that tells readers what exists and what to read next
 
 ## 3. Goals
@@ -53,11 +53,11 @@ Bookworm Digester solves this by converting source material into:
 
 ### 5.1 Engineering Agents
 
-An engineering agent should be able to read `INDEX.md`, identify relevant topics, then load only the linked markdown files needed for a coding task.
+An engineering agent should be able to read `INDEX.md`, identify relevant skills/topics, then load only the linked markdown files needed for a coding task.
 
 ### 5.2 Human Researchers or Analysts
 
-A human should be able to scan the index, open the most relevant topic digests, and avoid reading full source files unless provenance indicates a deeper check is necessary.
+A human should be able to scan the index, open the most relevant skill/topic digests, and avoid reading full source files unless provenance indicates a deeper check is necessary.
 
 ### 5.3 Automation Pipelines
 
@@ -88,7 +88,7 @@ Other Python code should be able to call the library API to digest files as part
 
 For each successful digestion run, the system must write:
 
-1. **one markdown file per topic**
+1. **one markdown file per discovered section-like topic / skill**
 2. **`INDEX.md`**
 
 ### 7.2 Topic File Requirements
@@ -99,6 +99,8 @@ Each topic markdown file must contain:
 - a concise summary
 - a list of durable key points
 - a list of source references
+
+Each topic file should be independently useful as a reusable skill-style artifact for another agent.
 
 ### 7.3 INDEX.md Requirements
 
@@ -132,7 +134,7 @@ The system must split extracted sections into bounded chunks suitable for repeat
 
 The system must preserve a growing topic map across digestion batches so later prompts can build on earlier understanding.
 
-### FR-5 Let the LLM Decide on Continuation
+### FR-5 Let the LLM Advise on Topic Continuation
 
 For each batch, the provider must return:
 
@@ -141,6 +143,7 @@ For each batch, the provider must return:
 - rationale
 
 The system must honor early stop requests only after a configurable minimum number of batches.
+`should_continue` applies to the currently visible topics, not to the entire remaining corpus. If chunks remain, the system must continue digesting them unless `max_batches` has been reached.
 
 ### FR-6 Finalize Topics for Export
 
@@ -170,7 +173,7 @@ Generated summaries must prefer high-value, reusable facts over verbose restatem
 
 ### 9.2 Topic-Centric Organization
 
-Output should be organized around topics, not around raw chunks or page order.
+Output should be organized around section-like topics / skills, not around raw chunks or page order.
 
 ### 9.3 Provenance
 
@@ -187,7 +190,7 @@ The system must provide configuration knobs that let operators trade off:
 - cost
 - latency
 - recall
-- number of output topics
+- number of active topics kept in prompt context
 
 ## 10. CLI Requirements
 
@@ -209,7 +212,7 @@ It must also accept:
 - `--batch-size`
 - `--minimum-batches-before-stop`
 - `--max-batches`
-- `--max-topics`
+- `--max-active-topics` (with `--max-topics` retained as a compatibility alias)
 
 When `--provider-kind ollama` is selected, the CLI must:
 
@@ -248,6 +251,8 @@ Output:
 - `should_continue`
 - `rationale`
 
+The continuation decision answers: "do these visible topics likely continue into nearby chunks?" It does not authorize stopping before unseen chunks are processed.
+
 ### 12.2 Finalization Contract
 
 Input:
@@ -256,7 +261,7 @@ Input:
 
 Output:
 
-- finalized list of topics suitable for markdown export
+- finalized list of topics suitable for markdown export as reusable skill files
 
 ## 13. Markdown Quality Requirements
 
@@ -290,7 +295,7 @@ The initial implementation must support configuration of:
 - chunks per provider batch
 - minimum batches before early stopping
 - maximum batches
-- maximum topics
+- maximum active topics kept in prompt context
 - provider kind
 - model name
 - credential inputs
@@ -304,7 +309,7 @@ The system is considered acceptable when it can:
 3. Produce one or more chunks
 4. Call the provider through the abstract interface
 5. Accumulate at least one topic
-6. Write topic markdown files
+6. Write skill/topic markdown files
 7. Write `INDEX.md`
 8. Expose the same core behavior through CLI and library API
 
@@ -331,7 +336,7 @@ Every topic should be able to point back to source material through structured r
 
 ### 16.4 Cost Awareness
 
-Operators should be able to reduce provider usage by shrinking chunk sizes, batch counts, or topic counts.
+Operators should be able to reduce provider usage by shrinking chunk sizes, batch counts, or active topic counts.
 
 ### 16.5 Deterministic Core
 

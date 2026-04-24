@@ -11,7 +11,7 @@ from digester.core.prompts import (
 def test_digest_prompts_preserve_setup_and_hardware_detail() -> None:
     system_prompt = build_digest_system_prompt()
     request = DigestBatchRequest(
-        config=DigestConfig(max_topics=8),
+        config=DigestConfig(max_active_topics=8),
         batch_number=1,
         total_batches=3,
         chunk_batch=[
@@ -33,9 +33,12 @@ def test_digest_prompts_preserve_setup_and_hardware_detail() -> None:
     user_prompt = build_digest_user_prompt(request)
 
     assert "hardware installation steps" in system_prompt
+    assert "section-level skill file" in system_prompt
     assert "setup sequences" in user_prompt
     assert "verification steps" in user_prompt
     assert "5-12 bullets" in user_prompt
+    assert "active topics in view" in user_prompt
+    assert "later chunks may contain different topics" in user_prompt
 
 
 def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
@@ -60,5 +63,6 @@ def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
 
     assert "hardware setup flows" in system_prompt
     assert "commands, prerequisites, warnings, validation checks" in system_prompt
+    assert "reusable skill file" in system_prompt
     assert "Expand weak summaries" in user_prompt
     assert "setup flow, operational nuance, and important edge cases" in user_prompt

@@ -7,9 +7,9 @@ Bookworm Digester is a Python package that converts heterogeneous document sourc
 1. **Source adapters** extract raw content from each supported file type.
 2. **Canonical models** normalize extracted content into a shared structure.
 3. **Chunking** converts document sections into bounded units for incremental LLM digestion.
-4. **Digest orchestration** loops through chunk batches, updating a topic map and asking the provider whether more input is required.
+4. **Digest orchestration** loops through chunk batches, updating a topic map and asking the provider whether the currently visible topics likely continue into adjacent chunks.
 5. **Provider abstraction** isolates prompt construction from LLM transport details.
-6. **Artifact generation** writes one markdown file per topic plus a navigational `INDEX.md`.
+6. **Artifact generation** writes one markdown file per discovered skill/topic plus a navigational `INDEX.md`.
 
 This design keeps the core workflow stable while allowing new source types and new LLM backends to be added without rewriting the pipeline.
 
@@ -109,7 +109,7 @@ Chunks are designed to be provider-facing payloads that remain small enough for 
 
 ### 4.5 TopicDigest
 
-`TopicDigest` is the accumulated topic-centric output:
+`TopicDigest` is the accumulated section-like skill/topic output:
 
 - `slug`
 - `title`
@@ -131,7 +131,8 @@ The `merge()` method merges topic updates from successive LLM iterations by:
 - `batch_size`
 - `minimum_batches_before_stop`
 - `max_batches`
-- `max_topics`
+- `max_active_topics`
+- `max_topics` (compatibility alias for `max_active_topics`)
 
 This is the primary place to tune cost, latency, and recall.
 
@@ -250,9 +251,9 @@ The orchestrator lives in `src/digester/core/orchestrator.py`.
 1. Convert normalized documents into chunks
 2. Build batch windows using `batch_size`
 3. For each batch:
-   - pass current topics and new chunks to the provider
+   - pass the currently active topics and new chunks to the provider
    - merge returned topic updates into the in-memory topic map
-   - stop early when the provider indicates coverage is sufficient and the minimum batch threshold has been met
+   - treat `should_continue` as guidance about whether the visible topics likely continue into nearby chunks
 4. Ask the provider to finalize topics for export
 5. Return a `DigestResult`
 
@@ -262,7 +263,8 @@ The loop ends when any of the following happens:
 
 - all computed batches are processed
 - `max_batches` is reached
-- the provider returns `should_continue = false` and `minimum_batches_before_stop` has been satisfied
+
+Provider completion does not stop corpus traversal on its own. It only marks the current topic cluster as sufficiently covered.
 
 ### 7.3 Why the Loop Is "Adaptive"
 
@@ -273,7 +275,7 @@ The system does not simply summarize the entire corpus in one call. Instead, it 
 - total batches
 - new chunk payloads
 
-This allows the provider to accumulate understanding and decide whether enough evidence exists to stop or whether more input should be read.
+This allows the provider to accumulate understanding and decide whether visible topics likely need more nearby evidence, while the orchestrator still walks all remaining chunks unless `max_batches` interrupts it.
 
 ### 7.4 Merging Behavior
 
@@ -294,13 +296,13 @@ The digest system prompt asks the model to:
 - behave as a document digestion engine
 - keep output concise and durable
 - return strict JSON
-- decide whether more content should be processed
+- decide whether the visible topics likely need more adjacent chunks
 
 The user prompt includes:
 
 - the current topic map
 - the current chunk batch
-- hard constraints such as max topics and anti-duplication guidance
+- hard constraints such as max active topics and anti-duplication guidance
 
 ### 8.2 Finalization Prompt
 
@@ -308,7 +310,7 @@ The finalization step asks the model to:
 
 - refine and compress existing topic digests
 - preserve factual key points
-- return a JSON object with a `topics` list
+- return a JSON object with a `topics` list suitable for reusable skill files
 
 ### 8.3 Output Schema Expectations
 
@@ -331,8 +333,8 @@ Digest response shape:
       ]
     }
   ],
-  "should_continue": true,
-  "rationale": "Need more context from later sections."
+ "should_continue": true,
+  "rationale": "Need more context from adjacent sections for the current visible topic."
 }
 ```
 
@@ -418,8 +420,9 @@ Each topic file contains:
 
 1. H1 title
 2. compact summary paragraph
-3. `## Key points`
-4. `## Source references`
+3. `## Detailed takeaways`
+4. `## Source files`
+5. `## Source references`
 
 Filename convention:
 
@@ -434,7 +437,7 @@ Filename convention:
 - input source list
 - final stop reason from the orchestrator
 
-This file is the navigation layer meant to help another LLM or human quickly identify which detailed markdown files matter.
+This file is the navigation layer meant to help another LLM or human quickly identify which skill/topic files matter.
 
 ## 11. Public Interfaces
 

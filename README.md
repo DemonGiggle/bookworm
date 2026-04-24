@@ -1,6 +1,8 @@
 # Bookworm Digester
 
-Bookworm Digester ingests source documents, incrementally digests them through an LLM-guided loop, and emits concise topic-centric markdown artifacts plus an `INDEX.md` for downstream human or agent workflows.
+Bookworm Digester ingests source documents, incrementally digests them through an LLM-guided loop, and emits section-like skill files plus an `INDEX.md` for downstream human or agent workflows.
+
+Each output file is meant to behave like a reusable skill/topic for another agent: focused enough to stand alone, but still traceable back to the source material.
 
 ## Supported inputs
 
@@ -22,7 +24,8 @@ bookworm digest docs/*.txt \
   --output-dir out \
   --provider-kind openai \
   --model gpt-4.1-mini \
-  --api-key "$OPENAI_API_KEY"
+  --api-key "$OPENAI_API_KEY" \
+  --max-active-topics 16
 ```
 
 ## Ollama example
@@ -37,3 +40,7 @@ bookworm digest docs/*.txt \
 ```
 
 If `--ollama-port` is omitted, the CLI defaults to port `11434`.
+
+## Loop semantics
+
+The digester always keeps processing remaining chunks unless it hits `--max-batches`. The provider's `should_continue` flag is narrower: it tells the orchestrator whether the **currently visible** section-like topics likely continue into adjacent chunks, not whether the whole corpus is finished. That lets Bookworm export many skill files from long documents instead of stopping early after a few seemingly complete topics.

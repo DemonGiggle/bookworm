@@ -43,10 +43,12 @@ class DigestOrchestrator:
         )
 
         topic_map: Dict[str, TopicDigest] = {}
+        active_topic_slugs: List[str] = []
         stop_reason = "Processed all available chunks."
+        available_batches = (len(chunks) + self.config.batch_size - 1) // self.config.batch_size
         total_batches = min(
             self.config.max_batches,
-            (len(chunks) + self.config.batch_size - 1) // self.config.batch_size,
+            available_batches,
         )
 
         for batch_index in range(total_batches):
@@ -54,7 +56,10 @@ class DigestOrchestrator:
             chunk_batch = chunks[start : start + self.config.batch_size]
             if not chunk_batch:
                 break
-            current_topics = ensure_topics_limited(list(topic_map.values()), self.config.max_topics)
+            current_topics = ensure_topics_limited(
+                [topic_map[slug] for slug in active_topic_slugs if slug in topic_map],
+                self.config.max_active_topics,
+            )
             batch_files = sorted({file_label(chunk.source_path) for chunk in chunk_batch})
             self.progress_reporter.update(
                 "Digesting batch {current}/{total} for {files}.".format(
@@ -75,9 +80,15 @@ class DigestOrchestrator:
                 existing = topic_map.get(update.slug)
                 if existing is None:
                     topic_map[update.slug] = update
+                    if update.slug in active_topic_slugs:
+                        active_topic_slugs.remove(update.slug)
+                    active_topic_slugs.append(update.slug)
                     continue
                 existing.merge(update)
                 existing.summary = collapse_topic_summary(existing.summary)
+                if update.slug in active_topic_slugs:
+                    active_topic_slugs.remove(update.slug)
+                active_topic_slugs.append(update.slug)
             self.progress_reporter.persist(
                 "Completed batch {current}/{total}; tracking {topics} topic(s).".format(
                     current=batch_index + 1,
@@ -89,23 +100,21 @@ class DigestOrchestrator:
                 not decision.should_continue
                 and batch_index + 1 >= self.config.minimum_batches_before_stop
             ):
-                stop_reason = decision.rationale or "Provider reported topic coverage was sufficient."
                 self.progress_reporter.persist(
-                    "Stopping after batch {current}/{total}: {reason}".format(
+                    "Batch {current}/{total} marked the current topic cluster as complete: {reason}".format(
                         current=batch_index + 1,
                         total=total_batches,
-                        reason=stop_reason,
+                        reason=decision.rationale
+                        or "Provider reported the visible section-like topics looked complete.",
                     )
                 )
-                break
 
         self.progress_reporter.update("Finalizing topic digests.")
-        topics = ensure_topics_limited(
-            self.provider.finalize_topics(list(topic_map.values())),
-            self.config.max_topics,
-        )
+        topics = self.provider.finalize_topics(list(topic_map.values()))
         if not topics:
             raise ValueError("The provider returned no topics for the supplied corpus.")
+        if total_batches < available_batches:
+            stop_reason = "Reached max_batches before processing all available chunks."
         self.progress_reporter.persist(
             "Finalized {count} topic digest(s).".format(count=len(topics))
         )
