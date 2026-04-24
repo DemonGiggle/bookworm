@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bookworm-digester"
+version = "0.1.0"
+description = "Topic-centric document digester for multi-format sources and pluggable LLM providers."
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+  "openai>=1.30.0",
+  "openpyxl>=3.1.2",
+  "pypdf>=4.2.0",
+  "python-docx>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2.0",
+]
+
+[project.scripts]
+bookworm-digest = "digester.interfaces.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
