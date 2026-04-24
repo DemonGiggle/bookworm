@@ -7,16 +7,33 @@ from ..utils.progress import NoOpProgressReporter, ProgressReporter, file_label
 from .models import DigestResult, TopicDigest
 
 
+def _unique_source_paths(topic: TopicDigest):
+    seen = set()
+    ordered = []
+    for ref in topic.references:
+        if ref.source_path in seen:
+            continue
+        seen.add(ref.source_path)
+        ordered.append(ref.source_path)
+    return ordered
+
+
 def _render_topic_markdown(topic: TopicDigest) -> str:
     lines = [
         "# {title}".format(title=topic.title),
         "",
+        "## Overview",
+        "",
         topic.summary.strip(),
         "",
-        "## Key points",
+        "## Detailed takeaways",
         "",
     ]
     lines.extend("- {point}".format(point=point) for point in topic.key_points)
+    source_paths = _unique_source_paths(topic)
+    if source_paths:
+        lines.extend(["", "## Source files", ""])
+        lines.extend("- `{path}`".format(path=path) for path in source_paths)
     lines.extend(["", "## Source references", ""])
     lines.extend("- {ref}".format(ref=ref.render()) for ref in topic.references)
     lines.append("")
@@ -34,11 +51,13 @@ def _render_index_markdown(result: DigestResult) -> str:
     ]
     for topic in result.topics:
         file_name = "{slug}.md".format(slug=topic.slug)
+        preview_lines = [line.strip() for line in topic.summary.splitlines() if line.strip()]
+        preview = " ".join(preview_lines[:2])
         lines.append(
             "- [{title}]({file_name}) — {summary}".format(
                 title=topic.title,
                 file_name=file_name,
-                summary=topic.summary.splitlines()[0] if topic.summary else "",
+                summary=preview,
             )
         )
     lines.extend(

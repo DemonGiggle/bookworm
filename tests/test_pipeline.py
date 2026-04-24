@@ -16,8 +16,15 @@ class FakeProvider(LLMProvider):
         topic = TopicDigest(
             slug="architecture",
             title="Architecture",
-            summary="Summarizes the system design and interfaces.",
-            key_points=["Uses adapters for ingestion", "Emits topic-centric markdown"],
+            summary=(
+                "Summarizes the system design and interfaces.\n\n"
+                "Includes enough operational detail to help another engineer follow the setup flow."
+            ),
+            key_points=[
+                "Uses adapters for ingestion",
+                "Emits topic-centric markdown",
+                "Preserves setup detail for downstream readers",
+            ],
             references=[chunk.source_ref for chunk in request.chunk_batch],
         )
         should_continue = self.calls < 2
@@ -62,9 +69,15 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
         progress_reporter=reporter,
     ).digest_paths([input_path], output_dir)
 
+    topic_text = (output_dir / "architecture.md").read_text(encoding="utf-8")
+    index_text = (output_dir / "INDEX.md").read_text(encoding="utf-8")
+
     assert (output_dir / "architecture.md").exists()
     assert (output_dir / "INDEX.md").exists()
-    assert "Architecture" in (output_dir / "INDEX.md").read_text(encoding="utf-8")
+    assert "Architecture" in index_text
+    assert "## Overview" in topic_text
+    assert "## Detailed takeaways" in topic_text
+    assert "## Source files" in topic_text
     assert result.stop_reason == "Topic coverage is sufficient after two batches."
     persisted = [message for kind, message in reporter.messages if kind == "persist"]
     assert any("Loaded source.txt with 1 section(s)." == message for message in persisted)
