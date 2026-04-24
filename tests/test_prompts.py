@@ -34,10 +34,15 @@ def test_digest_prompts_preserve_setup_and_hardware_detail() -> None:
 
     assert "hardware installation steps" in system_prompt
     assert "section-level skill file" in system_prompt
+    assert "Codex, Claude Code, and Copilot" in system_prompt
+    assert "INDEX.md" in system_prompt
+    assert "routing-friendly purpose statements" in system_prompt
     assert "setup sequences" in user_prompt
     assert "verification steps" in user_prompt
     assert "5-12 bullets" in user_prompt
     assert "active topics in view" in user_prompt
+    assert "first summary sentence" in user_prompt
+    assert "operational rules" in user_prompt
     assert "later chunks may contain different topics" in user_prompt
 
 
@@ -64,5 +69,8 @@ def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
     assert "hardware setup flows" in system_prompt
     assert "commands, prerequisites, warnings, validation checks" in system_prompt
     assert "reusable skill file" in system_prompt
+    assert "first sentence of each summary must say when to use the skill" in system_prompt
+    assert "actionable instructions" in system_prompt
     assert "Expand weak summaries" in user_prompt
+    assert "routed skill" in user_prompt
     assert "setup flow, operational nuance, and important edge cases" in user_prompt

@@ -96,18 +96,21 @@ For each successful digestion run, the system must write:
 Each topic markdown file must contain:
 
 - a stable topic title
-- a concise summary
-- a list of durable key points
+- when-to-use guidance that tells a downstream agent when to load the skill
+- a concise purpose summary
+- a list of durable, actionable core instructions
+- workflow notes for using the skill safely with live repository context
 - a list of source references
 
-Each topic file should be independently useful as a reusable skill-style artifact for another agent.
+Each topic file should be independently useful as a reusable skill-style artifact for coding agents such as Codex, Claude Code, and Copilot.
 
 ### 7.3 INDEX.md Requirements
 
 `INDEX.md` must contain:
 
 - links to generated topic files
-- a short preview line for each topic
+- routing guidance that tells agents which skill file to load for a task
+- a short preview line for each skill
 - the list of original source inputs
 - a textual stop reason describing why the digestion loop ended
 
@@ -175,6 +178,10 @@ Generated summaries must prefer high-value, reusable facts over verbose restatem
 
 Output should be organized around section-like topics / skills, not around raw chunks or page order.
 
+### 9.2.1 Agent-Skill Usability
+
+Generated files should help coding agents decide what to read and how to act. `INDEX.md` should behave as the router, while each skill file should state when to use it, what instructions matter, what workflow notes or caveats apply, and where to verify source provenance.
+
 ### 9.3 Provenance
 
 Topic digests must retain enough provenance to let a human or downstream agent know where each topic came from.
@@ -197,7 +204,7 @@ The system must provide configuration knobs that let operators trade off:
 The CLI must support:
 
 ```bash
-bookworm-digest digest INPUT [INPUT ...] --output-dir OUT --model MODEL
+bookworm digest INPUT [INPUT ...] --output-dir OUT --model MODEL
 ```
 
 It must also accept:

@@ -16,6 +16,20 @@ def test_registry_loads_plain_text(tmp_path: Path) -> None:
     assert documents[0].sections[0].content == "alpha\n\nbeta"
 
 
+def test_registry_recursively_loads_supported_files_from_directories(tmp_path: Path) -> None:
+    nested_dir = tmp_path / "docs" / "guides"
+    nested_dir.mkdir(parents=True)
+    root_path = tmp_path / "docs" / "overview.txt"
+    nested_path = nested_dir / "setup.md"
+    root_path.write_text("root document", encoding="utf-8")
+    nested_path.write_text("nested document", encoding="utf-8")
+
+    documents = SourceRegistry().load_paths([tmp_path / "docs"])
+
+    loaded_paths = {document.path for document in documents}
+    assert loaded_paths == {root_path, nested_path}
+
+
 def test_registry_loads_docx(tmp_path: Path) -> None:
     path = tmp_path / "memo.docx"
     document = Document()

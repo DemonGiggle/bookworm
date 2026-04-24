@@ -76,8 +76,12 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     assert (output_dir / "architecture.md").exists()
     assert (output_dir / "INDEX.md").exists()
     assert "Architecture" in index_text
-    assert "## Overview" in topic_text
-    assert "## Detailed takeaways" in topic_text
+    assert "## Skill Routing" in index_text
+    assert "Use [Architecture](architecture.md) when the task involves:" in index_text
+    assert "## When To Use" in topic_text
+    assert "## Purpose" in topic_text
+    assert "## Core Instructions" in topic_text
+    assert "## Workflow Notes" in topic_text
     assert "## Source files" in topic_text
     assert result.stop_reason == "Processed all available chunks."
     assert provider.calls == 3
