@@ -94,7 +94,12 @@ class DigestConfig:
     batch_size: int = 2
     minimum_batches_before_stop: int = 2
     max_batches: int = 50
-    max_topics: int = 12
+    max_active_topics: int = 12
+    max_topics: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if self.max_topics is not None:
+            self.max_active_topics = self.max_topics
 
 
 @dataclass
@@ -170,7 +175,9 @@ class DigestResult:
 
 
 def ensure_topics_limited(topics: Sequence[TopicDigest], max_topics: int) -> List[TopicDigest]:
-    return list(topics[:max_topics])
+    if max_topics <= 0:
+        return []
+    return list(topics[-max_topics:])
 
 
 def collapse_topic_summary(summary: str) -> str:
