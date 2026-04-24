@@ -18,7 +18,7 @@ Bookworm Digester ingests source documents, incrementally digests them through a
 ## CLI example
 
 ```bash
-bookworm-digest digest docs/*.txt \
+bookworm digest docs/*.txt \
   --output-dir out \
   --provider-kind openai \
   --model gpt-4.1-mini \
@@ -28,7 +28,7 @@ bookworm-digest digest docs/*.txt \
 ## Ollama example
 
 ```bash
-bookworm-digest digest docs/*.txt \
+bookworm digest docs/*.txt \
   --output-dir out \
   --provider-kind ollama \
   --model llama3.1 \
