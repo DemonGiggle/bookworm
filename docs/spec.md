@@ -38,7 +38,7 @@ Bookworm Digester solves this by converting source material into:
 
 1. Offer both a CLI and a library API
 2. Keep the implementation deterministic where LLM behavior is not required
-3. Make it easy to integrate local/self-hosted models
+3. Make it easy to integrate local/self-hosted models such as Ollama
 
 ## 4. Non-Goals for v1
 
@@ -203,11 +203,19 @@ It must also accept:
 - `--api-key`
 - `--base-url`
 - `--organization`
+- `--ollama-host`
+- `--ollama-port`
 - `--max-chunk-chars`
 - `--batch-size`
 - `--minimum-batches-before-stop`
 - `--max-batches`
 - `--max-topics`
+
+When `--provider-kind ollama` is selected, the CLI must:
+
+- default the host to `127.0.0.1`
+- default the port to `11434`
+- allow both values to be overridden explicitly
 
 ## 11. Library API Requirements
 
@@ -366,6 +374,8 @@ Potential future revisions may add:
 5. retry policies and resilience controls
 6. richer prioritization logic for which chunks to read next
 7. run manifests, coverage metrics, and telemetry
+
+Ollama local backend support is included in the current implementation baseline.
 
 ## 20. Product Summary
 

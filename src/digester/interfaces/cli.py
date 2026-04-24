@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     digest_parser.add_argument(
         "--provider-kind",
         default="openai",
-        choices=["openai", "openai-compatible"],
+        choices=["openai", "openai-compatible", "ollama"],
         help="LLM provider kind.",
     )
     digest_parser.add_argument("--model", required=True, help="Model name to invoke.")
@@ -33,6 +33,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--organization",
         default=os.getenv("OPENAI_ORG_ID", ""),
         help="OpenAI organization ID.",
+    )
+    digest_parser.add_argument(
+        "--ollama-host",
+        default=os.getenv("OLLAMA_HOST", "127.0.0.1"),
+        help="Host or IP for the local Ollama server.",
+    )
+    digest_parser.add_argument(
+        "--ollama-port",
+        type=int,
+        default=int(os.getenv("OLLAMA_PORT", "11434")),
+        help="Port for the local Ollama server.",
     )
     digest_parser.add_argument("--max-chunk-chars", type=int, default=1800)
     digest_parser.add_argument("--batch-size", type=int, default=2)
@@ -55,6 +66,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             api_key=args.api_key,
             base_url=args.base_url or None,
             organization=args.organization or None,
+            ollama_host=args.ollama_host,
+            ollama_port=args.ollama_port,
         )
     )
     digester = DocumentDigester(

@@ -13,6 +13,7 @@ Bookworm Digester ingests source documents, incrementally digests them through a
 
 - `openai`: hosted OpenAI models
 - `openai-compatible`: local or self-hosted models that expose an OpenAI-compatible API
+- `ollama`: local Ollama server via `http://<host>:<port>/api/chat`
 
 ## CLI example
 
@@ -23,3 +24,16 @@ bookworm-digest digest docs/*.txt \
   --model gpt-4.1-mini \
   --api-key "$OPENAI_API_KEY"
 ```
+
+## Ollama example
+
+```bash
+bookworm-digest digest docs/*.txt \
+  --output-dir out \
+  --provider-kind ollama \
+  --model llama3.1 \
+  --ollama-host 127.0.0.1 \
+  --ollama-port 11434
+```
+
+If `--ollama-port` is omitted, the CLI defaults to port `11434`.

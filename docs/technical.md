@@ -53,7 +53,7 @@ bookworm/
 | --- | --- |
 | `digester.core` | Canonical data model, chunking rules, prompt construction, orchestration, markdown writing |
 | `digester.sources` | File-type-specific extraction and normalization into `SourceDocument` |
-| `digester.providers` | Provider abstraction and concrete OpenAI/OpenAI-compatible LLM transports |
+| `digester.providers` | Provider abstraction and concrete OpenAI, OpenAI-compatible, and Ollama LLM transports |
 | `digester.interfaces` | Public library API and CLI |
 | `tests` | Behavioral coverage for adapters, chunking, pipeline, and CLI |
 
@@ -387,12 +387,26 @@ This keeps the orchestration layer independent of vendor SDKs.
 
 This is the current extension point for local or self-hosted model servers that expose OpenAI-compatible APIs.
 
-### 9.4 Provider Factory
+### 9.4 OllamaProvider
+
+`OllamaProvider` integrates with Ollama's native `/api/chat` endpoint and keeps the rest of the pipeline on the same provider contract.
+
+Behavior:
+
+- defaults to `http://127.0.0.1:11434`
+- accepts an explicit host/IP and port
+- sends `stream: false` and `format: "json"` so the response is a single JSON object
+- reuses the same prompt schema and topic parsing behavior as the OpenAI-backed providers
+
+This makes local-model development straightforward without forcing users through an OpenAI-compatible shim.
+
+### 9.5 Provider Factory
 
 `ProviderSettings` and `create_provider()` isolate provider selection from CLI parsing and library orchestration. Current kinds:
 
 - `openai`
 - `openai-compatible`
+- `ollama`
 
 ## 10. Artifact Generation
 
@@ -475,6 +489,8 @@ Provider-specific parameters:
 - `--api-key`
 - `--base-url`
 - `--organization`
+- `--ollama-host`
+- `--ollama-port`
 
 ## 12. Error Handling
 

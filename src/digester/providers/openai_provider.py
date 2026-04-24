@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Dict, List, Optional
 
-from ..core.models import DigestBatchRequest, DigestDecision, SourceRef, TopicDigest
+from ..core.models import DigestBatchRequest, DigestDecision, TopicDigest
 from ..core.prompts import (
     build_digest_system_prompt,
     build_digest_user_prompt,
@@ -11,6 +11,7 @@ from ..core.prompts import (
     build_finalize_user_prompt,
 )
 from .base import LLMProvider
+from .parsing import parse_digest_decision, parse_finalized_topics
 
 
 class OpenAIProvider(LLMProvider):
@@ -58,7 +59,7 @@ class OpenAIProvider(LLMProvider):
             user_prompt=build_digest_user_prompt(request),
         )
         fallback_refs = [chunk.source_ref for chunk in request.chunk_batch]
-        return DigestDecision.from_payload(payload, fallback_refs=fallback_refs)
+        return parse_digest_decision(payload, fallback_refs=fallback_refs)
 
     def finalize_topics(self, topics: List[TopicDigest]) -> List[TopicDigest]:
         if not topics:
@@ -67,29 +68,4 @@ class OpenAIProvider(LLMProvider):
             system_prompt=build_finalize_system_prompt(),
             user_prompt=build_finalize_user_prompt(topics),
         )
-        finalized = payload.get("topics", [])
-        if not isinstance(finalized, list):
-            return topics
-        result: List[TopicDigest] = []
-        for raw_topic in finalized:
-            if not isinstance(raw_topic, dict):
-                continue
-            refs = []
-            for raw_ref in raw_topic.get("references", []):
-                if not isinstance(raw_ref, dict):
-                    continue
-                source_id = str(raw_ref.get("source_id", "")).strip()
-                source_path = str(raw_ref.get("source_path", "")).strip()
-                locator = str(raw_ref.get("locator", "")).strip()
-                if source_id and source_path and locator:
-                    refs.append(SourceRef(source_id=source_id, source_path=source_path, locator=locator))
-            result.append(
-                TopicDigest(
-                    slug=str(raw_topic.get("slug", "")).strip(),
-                    title=str(raw_topic.get("title", "")).strip(),
-                    summary=str(raw_topic.get("summary", "")).strip(),
-                    key_points=[str(point).strip() for point in raw_topic.get("key_points", []) if str(point).strip()],
-                    references=refs,
-                )
-            )
-        return [topic for topic in result if topic.slug and topic.title] or topics
+        return parse_finalized_topics(payload, fallback_topics=topics)
