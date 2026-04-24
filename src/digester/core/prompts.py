@@ -9,14 +9,16 @@ from .models import DigestBatchRequest, TopicDigest
 def build_digest_system_prompt() -> str:
     return (
         "You are a document digestion engine. Read the supplied chunks, update a section-like skill map of the corpus, "
-        "and decide whether the currently visible topics likely need more adjacent chunks before they are complete. Preserve high-value operational detail for downstream LLM agents, "
+        "and decide whether the currently visible topics likely need more adjacent chunks before they are complete. Preserve high-value operational detail for downstream coding agents such as Codex, Claude Code, and Copilot, "
         "especially setup flows, hardware installation steps, wiring order, firmware or software prerequisites, commands, "
         "configuration values, validation checks, warnings, failure conditions, and recovery notes. "
         "Compress repetition, but do not compress away procedures, dependencies, sequencing, or concrete implementation detail. "
         "Return strict JSON with keys: topic_updates, should_continue, rationale. "
         "Each topic update must include slug, title, summary, key_points, references. "
         "references must contain source_id, source_path, locator. "
-        "Treat each topic like a section-level skill file that another agent could reuse on its own. "
+        "Treat each topic like a section-level skill file that another agent could route to from an INDEX.md and reuse on its own. "
+        "Write summaries as routing-friendly purpose statements: what task the skill helps with, what context it preserves, and when an agent should load it. "
+        "Write key_points as actionable instructions, constraints, workflow steps, commands, checks, or caveats, not vague observations. "
         "Set should_continue to false only when the current visible topics already have strong coverage and the next chunks are more likely to introduce different topics than extend these ones."
     )
 
@@ -48,10 +50,12 @@ def build_digest_user_prompt(request: DigestBatchRequest) -> str:
         "New chunks:\n{chunks}\n\n"
         "Constraints:\n"
         "- Keep at most {max_topics} active topics in view for this batch.\n"
-        "- Topics should behave like section-level skill files: each one should cover a coherent, reusable slice of the source rather than the whole corpus.\n"
-        "- Summaries should be rich, actionable, and markdown-ready, usually 2-5 compact paragraphs when the material supports it.\n"
+        "- Topics should behave like section-level skill files for coding agents: each one should cover a coherent, reusable slice of the source rather than the whole corpus.\n"
+        "- Summaries should be rich, actionable, routing-friendly, and markdown-ready, usually 2-5 compact paragraphs when the material supports it.\n"
+        "- The first summary sentence should make clear when an agent should load the skill.\n"
         "- Preserve setup sequences, hardware steps, prerequisites, commands, parameter values, safety notes, verification steps, and troubleshooting clues when present.\n"
-        "- Key points should be concrete, fact-like, and numerous enough to preserve important detail; prefer roughly 5-12 bullets when the source is dense.\n"
+        "- Key points should be concrete, imperative when useful, and numerous enough to preserve important detail; prefer roughly 5-12 bullets when the source is dense.\n"
+        "- Prefer operational rules, workflow steps, constraints, examples, commands, validation checks, and failure modes over generic observations.\n"
         "- Merge overlapping ideas instead of creating duplicates.\n"
         "- Favor detail that helps another engineer or agent reproduce the setup, understand the implementation, or avoid mistakes.\n"
         "- Use should_continue=true when the visible topic still looks incomplete or likely continues in upcoming chunks. Use should_continue=false when these visible topics look complete even if later chunks may contain different topics."
@@ -66,10 +70,12 @@ def build_digest_user_prompt(request: DigestBatchRequest) -> str:
 
 def build_finalize_system_prompt() -> str:
     return (
-        "You are preparing final topic digests for markdown export. "
+        "You are preparing final topic digests for markdown export as agent-readable skill files. "
         "Return strict JSON with a single key named topics. "
         "Each topic must include slug, title, summary, key_points, references. "
-        "Produce rich markdown-ready summaries that keep the most useful implementation and setup detail. Each topic should read like a reusable skill file for another agent. "
+        "Produce rich markdown-ready summaries that keep the most useful implementation and setup detail. Each topic should read like a reusable skill file for coding agents such as Codex, Claude Code, and Copilot. "
+        "The first sentence of each summary must say when to use the skill. "
+        "Key points must be actionable instructions, constraints, ordered workflow guidance, examples, commands, checks, warnings, or caveats. "
         "Do not collapse away hardware setup flows, ordered procedures, commands, prerequisites, warnings, validation checks, or troubleshooting notes. "
         "Remove duplication, but preserve concrete facts and enough detail that another LLM or engineer could act on the output without rereading the whole source."
     )
@@ -88,6 +94,7 @@ def build_finalize_user_prompt(topics: Sequence[TopicDigest]) -> str:
     ]
     return (
         "Finalize these topics for markdown export. Expand weak summaries into more useful detail where the existing topic data supports it. "
+        "Shape each topic as a routed skill: make the first summary sentence explain when to load it, and rewrite key points into operational guidance an agent can follow. "
         "Keep the output concise enough for downstream context windows, but detailed enough to preserve setup flow, operational nuance, and important edge cases.\n"
         "{payload}"
     ).format(payload=json.dumps(payload, indent=2))

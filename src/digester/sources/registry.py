@@ -37,7 +37,7 @@ class SourceRegistry:
                 reporter.persist("Scanning directory {name}.".format(name=file_label(path)))
                 documents.extend(
                     self.load_paths(
-                        sorted(child for child in path.iterdir() if child.is_file()),
+                        sorted(child for child in path.iterdir()),
                         progress_reporter=reporter,
                     )
                 )

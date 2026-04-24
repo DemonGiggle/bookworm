@@ -19,17 +19,34 @@ def _unique_source_paths(topic: TopicDigest):
 
 
 def _render_topic_markdown(topic: TopicDigest) -> str:
+    summary = topic.summary.strip()
     lines = [
         "# {title}".format(title=topic.title),
         "",
-        "## Overview",
+        "## When To Use",
         "",
-        topic.summary.strip(),
+        "Use this skill when work requires the source-backed guidance captured in this topic: {summary}".format(
+            summary=summary.splitlines()[0] if summary else topic.title
+        ),
         "",
-        "## Detailed takeaways",
+        "## Purpose",
+        "",
+        summary,
+        "",
+        "## Core Instructions",
         "",
     ]
     lines.extend("- {point}".format(point=point) for point in topic.key_points)
+    lines.extend(
+        [
+            "",
+            "## Workflow Notes",
+            "",
+            "- Load this skill before acting on tasks that match the routing guidance in `INDEX.md`.",
+            "- Treat the instructions above as source-backed context, not as a replacement for checking current repository code.",
+            "- Use the source references when a decision depends on exact wording, provenance, or missing detail.",
+        ]
+    )
     source_paths = _unique_source_paths(topic)
     if source_paths:
         lines.extend(["", "## Source files", ""])
@@ -44,9 +61,11 @@ def _render_index_markdown(result: DigestResult) -> str:
     lines = [
         "# Index",
         "",
-        "Generated topic digests for downstream human and LLM readers.",
+        "Generated skill map for downstream coding agents and human readers.",
         "",
-        "## Topics",
+        "Use this file as the router: identify the task you are doing, load the matching skill files, then use their source references when exact provenance matters.",
+        "",
+        "## Skill Routing",
         "",
     ]
     for topic in result.topics:
@@ -54,7 +73,7 @@ def _render_index_markdown(result: DigestResult) -> str:
         preview_lines = [line.strip() for line in topic.summary.splitlines() if line.strip()]
         preview = " ".join(preview_lines[:2])
         lines.append(
-            "- [{title}]({file_name}) — {summary}".format(
+            "- Use [{title}]({file_name}) when the task involves: {summary}".format(
                 title=topic.title,
                 file_name=file_name,
                 summary=preview,

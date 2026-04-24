@@ -419,10 +419,12 @@ Markdown writing lives in `src/digester/core/artifacts.py`.
 Each topic file contains:
 
 1. H1 title
-2. compact summary paragraph
-3. `## Detailed takeaways`
-4. `## Source files`
-5. `## Source references`
+2. `## When To Use`
+3. `## Purpose`
+4. `## Core Instructions`
+5. `## Workflow Notes`
+6. `## Source files`
+7. `## Source references`
 
 Filename convention:
 
@@ -432,12 +434,13 @@ Filename convention:
 
 `INDEX.md` contains:
 
-- topic links
-- first-line topic summary preview
+- skill routing guidance
+- skill links
+- first-line skill summary preview
 - input source list
 - final stop reason from the orchestrator
 
-This file is the navigation layer meant to help another LLM or human quickly identify which skill files matter.
+This file is the navigation layer meant to help a coding agent or human quickly identify which skill files matter before loading only the relevant markdown artifacts.
 
 ## 11. Public Interfaces
 
@@ -470,7 +473,7 @@ The CLI is defined in `src/digester/interfaces/cli.py`.
 Supported command:
 
 ```bash
-bookworm-digest digest INPUT [INPUT ...] \
+bookworm digest INPUT [INPUT ...] \
   --output-dir OUT \
   --provider-kind openai \
   --model gpt-4.1-mini \
