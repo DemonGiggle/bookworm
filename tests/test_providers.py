@@ -6,10 +6,28 @@ import httpx
 import pytest
 from openai import PermissionDeniedError
 
-from digester.core.models import DigestBatchRequest, DigestConfig, SourceRef, TopicDigest
-from digester.providers import ProviderSettings, create_provider
+from digester.core.models import (
+    ContentChunk,
+    DigestBatchRequest,
+    DigestConfig,
+    SourceRef,
+    TopicDigest,
+)
+from digester.providers import MockLLMProvider, ProviderSettings, create_provider
 from digester.providers.ollama_provider import OllamaProvider, _normalize_base_url
 from digester.providers.openai_provider import OpenAIProvider
+
+
+def test_create_provider_builds_mock_llm_provider() -> None:
+    provider = create_provider(
+        ProviderSettings(
+            provider_kind="mock-llm",
+            model="fake-model",
+        )
+    )
+
+    assert isinstance(provider, MockLLMProvider)
+    assert provider.model == "fake-model"
 
 
 def test_create_provider_builds_ollama_provider() -> None:
@@ -30,6 +48,58 @@ def test_normalize_base_url_preserves_scheme_and_default_port() -> None:
     assert _normalize_base_url("127.0.0.1", 11434) == "http://127.0.0.1:11434"
     assert _normalize_base_url("http://10.0.0.8", 11434) == "http://10.0.0.8:11434"
     assert _normalize_base_url("https://localhost:15000", 11434) == "https://localhost:15000"
+
+
+def test_mock_llm_provider_generates_deterministic_placeholder_topics() -> None:
+    provider = MockLLMProvider(model="fake-model")
+
+    decision = provider.digest_batch(
+        DigestBatchRequest(
+            config=DigestConfig(),
+            batch_number=1,
+            total_batches=2,
+            chunk_batch=[
+                ContentChunk(
+                    chunk_id="alpha-chunk-1",
+                    source_id="alpha-notes",
+                    source_path="/tmp/Alpha Notes.txt",
+                    section_heading="Alpha Notes",
+                    text="Alpha content",
+                    source_ref=SourceRef(
+                        source_id="alpha-notes",
+                        source_path="/tmp/Alpha Notes.txt",
+                        locator="full-document",
+                    ),
+                ),
+                ContentChunk(
+                    chunk_id="beta-chunk-1",
+                    source_id="beta-notes",
+                    source_path="/tmp/beta_notes.md",
+                    section_heading="beta_notes",
+                    text="Beta content",
+                    source_ref=SourceRef(
+                        source_id="beta-notes",
+                        source_path="/tmp/beta_notes.md",
+                        locator="full-document",
+                    ),
+                ),
+            ],
+            current_topics=[],
+        )
+    )
+
+    assert decision.should_continue is True
+    assert (
+        decision.rationale
+        == "MockLLM continues through the remaining batches to exercise the full pipeline."
+    )
+    assert [topic.slug for topic in decision.topic_updates] == ["mock-alpha-notes", "mock-beta-notes"]
+    assert [topic.title for topic in decision.topic_updates] == ["Mock Alpha Notes", "Mock Beta Notes"]
+    assert all(
+        "without semantically parsing the document content" in topic.summary
+        for topic in decision.topic_updates
+    )
+    assert all(topic.references for topic in decision.topic_updates)
 
 
 def test_ollama_provider_digest_batch(monkeypatch) -> None:

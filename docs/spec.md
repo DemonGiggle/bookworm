@@ -231,6 +231,12 @@ When `--provider-kind ollama` is selected, the CLI must:
 - default the port to `11434`
 - allow both values to be overridden explicitly
 
+When `--provider-kind mock-llm` is selected, the CLI must:
+
+- require no API key
+- require no network access
+- return deterministic placeholder topics that preserve real source references for end-to-end validation
+
 ## 11. Library API Requirements
 
 The library API must:

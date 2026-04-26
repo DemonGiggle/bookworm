@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .base import LLMProvider
+from .mock_llm_provider import MockLLMProvider
 from .ollama_provider import OllamaProvider
 from .openai_compatible import OpenAICompatibleProvider
 from .openai_provider import OpenAIProvider
@@ -39,4 +40,6 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             host=settings.ollama_host,
             port=settings.ollama_port,
         )
+    if settings.provider_kind == "mock-llm":
+        return MockLLMProvider(model=settings.model)
     raise ValueError("Unknown provider kind: {kind}".format(kind=settings.provider_kind))

@@ -222,6 +222,34 @@ def test_cli_passes_ollama_host_and_port(monkeypatch, tmp_path: Path, capsys) ->
     assert "Using provider ollama (192.168.1.10:11555) with model llama3.1." in captured.err
 
 
+def test_cli_mock_llm_runs_without_api_key(tmp_path: Path, monkeypatch, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert (output_dir / "copilot" / ".github" / "skills" / "mock-notes" / "SKILL.md").exists()
+    assert (output_dir / "opencode" / ".opencode" / "skills" / "mock-notes" / "SKILL.md").exists()
+    assert (output_dir / "codex" / ".agents" / "skills" / "mock-notes" / "SKILL.md").exists()
+    assert "Using provider mock-llm with model fake-model." in captured.err
+    assert "Wrote 1 skill(s) for 3 agent target(s)" in captured.out
+
+
 def test_cli_max_topics_flag_is_kept_as_compatibility_alias() -> None:
     args = cli.build_parser().parse_args(
         [
@@ -231,6 +259,8 @@ def test_cli_max_topics_flag_is_kept_as_compatibility_alias() -> None:
             "artifacts",
             "--model",
             "fake-model",
+            "--provider-kind",
+            "mock-llm",
             "--max-topics",
             "7",
         ]

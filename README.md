@@ -25,6 +25,7 @@ out/
 - `openai`: hosted OpenAI models
 - `openai-compatible`: local or self-hosted models that expose an OpenAI-compatible API
 - `ollama`: local Ollama server via `http://<host>:<port>/api/chat`
+- `mock-llm`: deterministic fake output for fast end-to-end validation without a real LLM call
 
 ## CLI example
 
@@ -61,6 +62,17 @@ bookworm digest docs/*.txt \
 ```
 
 If `--ollama-port` is omitted, the CLI defaults to port `11434`.
+
+## MockLLM example
+
+```bash
+bookworm digest docs/*.txt \
+  --output-dir out \
+  --provider-kind mock-llm \
+  --model fake-model
+```
+
+`mock-llm` does not require an API key and intentionally produces synthetic placeholder topics from source metadata so you can validate ingestion, orchestration, and artifact export flows quickly.
 
 ## Loop semantics
 
