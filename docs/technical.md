@@ -437,6 +437,12 @@ Directory conventions:
 - `opencode/.opencode/skills/{slug}/SKILL.md`
 - `codex/.agents/skills/{slug}/SKILL.md`
 
+Each agent export root also includes an `INSTALL.md` file with the documented project and global install locations for that agent's skills:
+
+- `copilot/INSTALL.md`
+- `opencode/INSTALL.md`
+- `codex/INSTALL.md`
+
 The description/frontmatter acts as the routing layer for downstream agents, so the runtime no longer emits a separate top-level `INDEX.md`.
 
 ## 11. Public Interfaces

@@ -74,12 +74,20 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     copilot_skill = output_dir / "copilot" / ".github" / "skills" / "architecture" / "SKILL.md"
     opencode_skill = output_dir / "opencode" / ".opencode" / "skills" / "architecture" / "SKILL.md"
     codex_skill = output_dir / "codex" / ".agents" / "skills" / "architecture" / "SKILL.md"
+    copilot_install = output_dir / "copilot" / "INSTALL.md"
+    opencode_install = output_dir / "opencode" / "INSTALL.md"
+    codex_install = output_dir / "codex" / "INSTALL.md"
     topic_text = copilot_skill.read_text(encoding="utf-8")
     opencode_text = opencode_skill.read_text(encoding="utf-8")
+    copilot_install_text = copilot_install.read_text(encoding="utf-8")
 
     assert copilot_skill.exists()
     assert opencode_skill.exists()
     assert codex_skill.exists()
+    assert copilot_install.exists()
+    assert opencode_install.exists()
+    assert codex_install.exists()
+    assert not (output_dir / "copilot" / "installer.sh").exists()
     assert not (output_dir / "INDEX.md").exists()
     assert 'name: architecture' in topic_text
     assert 'description: "Use this skill when work requires Summarizes the system design and interfaces."' in topic_text
@@ -89,11 +97,14 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     assert "## Workflow Notes" in topic_text
     assert "## Source files" in topic_text
     assert "compatibility: opencode" in opencode_text
+    assert "Project: `.github/skills/<skill-name>/SKILL.md`" in copilot_install_text
+    assert "Global: `~/.copilot/skills/<skill-name>/SKILL.md`" in copilot_install_text
     assert result.stop_reason == "Processed all available chunks."
     assert result.artifact_paths["copilot"] == output_dir / "copilot"
     assert result.artifact_paths["copilot:architecture"] == copilot_skill
     assert result.artifact_paths["opencode:architecture"] == opencode_skill
     assert result.artifact_paths["codex:architecture"] == codex_skill
+    assert result.artifact_paths["copilot:install"] == copilot_install
     assert provider.calls == 3
     persisted = [message for kind, message in reporter.messages if kind == "persist"]
     assert any("Loaded source.txt with 1 section(s)." == message for message in persisted)
@@ -102,6 +113,7 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     assert any("marked the current topic cluster as complete" in message for message in persisted)
     assert any("Finished digestion with 1 skill file(s)." == message for message in persisted)
     assert any("Generated " in message and "copilot/.github/skills/architecture/SKILL.md" in message for message in persisted)
+    assert any("Generated " in message and "copilot/INSTALL.md" in message for message in persisted)
 
 
 class ManyTopicProvider(LLMProvider):
@@ -142,6 +154,9 @@ def test_document_digester_keeps_all_discovered_topics_for_export(tmp_path: Path
         assert (output_dir / "copilot" / ".github" / "skills" / slug / "SKILL.md").exists()
         assert (output_dir / "opencode" / ".opencode" / "skills" / slug / "SKILL.md").exists()
         assert (output_dir / "codex" / ".agents" / "skills" / slug / "SKILL.md").exists()
+    assert (output_dir / "copilot" / "INSTALL.md").exists()
+    assert (output_dir / "opencode" / "INSTALL.md").exists()
+    assert (output_dir / "codex" / "INSTALL.md").exists()
 
 
 class LimitedBatchProvider(LLMProvider):

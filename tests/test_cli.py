@@ -58,6 +58,9 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
     assert (output_dir / "copilot" / ".github" / "skills" / "summary" / "SKILL.md").exists()
     assert (output_dir / "opencode" / ".opencode" / "skills" / "summary" / "SKILL.md").exists()
     assert (output_dir / "codex" / ".agents" / "skills" / "summary" / "SKILL.md").exists()
+    assert (output_dir / "copilot" / "INSTALL.md").exists()
+    assert (output_dir / "opencode" / "INSTALL.md").exists()
+    assert (output_dir / "codex" / "INSTALL.md").exists()
     assert "Using provider openai with model fake-model." in captured.err
     assert "Loaded notes.txt with 1 section(s)." in captured.err
     assert "Completed batch 1/1; tracking 1 topic(s)." in captured.err
@@ -248,6 +251,9 @@ def test_cli_mock_llm_runs_without_api_key(tmp_path: Path, monkeypatch, capsys) 
     assert (output_dir / "copilot" / ".github" / "skills" / "mock-notes" / "SKILL.md").exists()
     assert (output_dir / "opencode" / ".opencode" / "skills" / "mock-notes" / "SKILL.md").exists()
     assert (output_dir / "codex" / ".agents" / "skills" / "mock-notes" / "SKILL.md").exists()
+    assert (output_dir / "copilot" / "INSTALL.md").exists()
+    assert (output_dir / "opencode" / "INSTALL.md").exists()
+    assert (output_dir / "codex" / "INSTALL.md").exists()
     assert "Using provider mock-llm with model fake-model." in captured.err
     assert "Wrote 1 skill(s) for 3 agent target(s)" in captured.out
 

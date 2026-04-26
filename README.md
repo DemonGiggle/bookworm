@@ -8,10 +8,18 @@ By default, each run writes three directories beneath the chosen output director
 
 ```text
 out/
-├── copilot/.github/skills/<skill-name>/SKILL.md
-├── opencode/.opencode/skills/<skill-name>/SKILL.md
-└── codex/.agents/skills/<skill-name>/SKILL.md
+├── copilot/
+│   ├── INSTALL.md
+│   └── .github/skills/<skill-name>/SKILL.md
+├── opencode/
+│   ├── INSTALL.md
+│   └── .opencode/skills/<skill-name>/SKILL.md
+└── codex/
+    ├── INSTALL.md
+    └── .agents/skills/<skill-name>/SKILL.md
 ```
+
+Each agent root also includes a short `INSTALL.md` that lists the documented project and global locations for that agent's skills.
 
 ## Supported inputs
 

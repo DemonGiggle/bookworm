@@ -15,16 +15,30 @@ class AgentSkillLayout:
     agent_name: str
     skills_path_parts: Tuple[str, ...]
     compatibility: Optional[str] = None
+    project_install_path: str = ""
+    global_install_path: str = ""
 
 
 DEFAULT_AGENT_LAYOUTS: Tuple[AgentSkillLayout, ...] = (
-    AgentSkillLayout(agent_name="copilot", skills_path_parts=(".github", "skills")),
+    AgentSkillLayout(
+        agent_name="copilot",
+        skills_path_parts=(".github", "skills"),
+        project_install_path=".github/skills/<skill-name>/SKILL.md",
+        global_install_path="~/.copilot/skills/<skill-name>/SKILL.md",
+    ),
     AgentSkillLayout(
         agent_name="opencode",
         skills_path_parts=(".opencode", "skills"),
         compatibility="opencode",
+        project_install_path=".opencode/skills/<skill-name>/SKILL.md",
+        global_install_path="~/.config/opencode/skills/<skill-name>/SKILL.md",
     ),
-    AgentSkillLayout(agent_name="codex", skills_path_parts=(".agents", "skills")),
+    AgentSkillLayout(
+        agent_name="codex",
+        skills_path_parts=(".agents", "skills"),
+        project_install_path=".agents/skills/<skill-name>/SKILL.md",
+        global_install_path="~/.agents/skills/<skill-name>/SKILL.md",
+    ),
 )
 
 
@@ -105,11 +119,40 @@ def _render_skill_markdown(
     return "\n".join(frontmatter_lines) + _render_skill_body(topic)
 
 
+def _render_install_markdown(layout: AgentSkillLayout) -> str:
+    return "\n".join(
+        [
+            "# Install",
+            "",
+            "Project: `{path}`".format(path=layout.project_install_path),
+            "Global: `{path}`".format(path=layout.global_install_path),
+            "",
+        ]
+    )
+
+
 class MarkdownArtifactWriter:
     def __init__(self, agent_layouts: Sequence[AgentSkillLayout] = DEFAULT_AGENT_LAYOUTS) -> None:
         self.agent_layouts = tuple(agent_layouts)
         self._skill_dir_names: Dict[str, str] = {}
         self._used_skill_dir_names: Set[str] = set()
+        self._install_doc_paths: Dict[str, Path] = {}
+
+    def _write_install_doc(
+        self,
+        layout: AgentSkillLayout,
+        agent_root: Path,
+        progress_reporter: ProgressReporter,
+    ) -> Path:
+        install_doc_path = self._install_doc_paths.get(layout.agent_name)
+        if install_doc_path is not None and install_doc_path.exists():
+            return install_doc_path
+        if install_doc_path is None:
+            install_doc_path = agent_root / "INSTALL.md"
+            self._install_doc_paths[layout.agent_name] = install_doc_path
+        install_doc_path.write_text(_render_install_markdown(layout), encoding="utf-8")
+        progress_reporter.persist("Generated {path}.".format(path=install_doc_path))
+        return install_doc_path
 
     def _skill_dir_name_for(self, topic: TopicDigest) -> str:
         existing = self._skill_dir_names.get(topic.slug)
@@ -139,6 +182,11 @@ class MarkdownArtifactWriter:
             skills_root = agent_root.joinpath(*layout.skills_path_parts)
             skills_root.mkdir(parents=True, exist_ok=True)
             artifact_paths[layout.agent_name] = agent_root
+            artifact_paths["{agent}:install".format(agent=layout.agent_name)] = self._write_install_doc(
+                layout,
+                agent_root,
+                reporter,
+            )
             for topic in topics:
                 skill_dir_name = self._skill_dir_name_for(topic)
                 skill_path = skills_root / skill_dir_name / "SKILL.md"
