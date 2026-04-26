@@ -34,6 +34,7 @@ bookworm/
 │       ├── providers/
 │       │   ├── base.py
 │       │   ├── factory.py
+│       │   ├── mock_llm_provider.py
 │       │   ├── openai_compatible.py
 │       │   └── openai_provider.py
 │       └── sources/
@@ -53,7 +54,7 @@ bookworm/
 | --- | --- |
 | `digester.core` | Canonical data model, chunking rules, prompt construction, orchestration, markdown writing |
 | `digester.sources` | File-type-specific extraction and normalization into `SourceDocument` |
-| `digester.providers` | Provider abstraction and concrete OpenAI, OpenAI-compatible, and Ollama LLM transports |
+| `digester.providers` | Provider abstraction and concrete OpenAI, OpenAI-compatible, Ollama, and MockLLM transports |
 | `digester.interfaces` | Public library API and CLI |
 | `tests` | Behavioral coverage for adapters, chunking, pipeline, and CLI |
 
@@ -411,6 +412,7 @@ This makes local-model development straightforward without forcing users through
 - `openai`
 - `openai-compatible`
 - `ollama`
+- `mock-llm`
 
 ## 10. Artifact Generation
 
@@ -499,6 +501,8 @@ Provider-specific parameters:
 - `--organization`
 - `--ollama-host`
 - `--ollama-port`
+
+`mock-llm` skips network access and credentials entirely, returning deterministic placeholder topics derived from source metadata and references so the rest of the digestion pipeline can be exercised quickly.
 
 ## 12. Error Handling
 

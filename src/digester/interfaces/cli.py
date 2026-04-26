@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     digest_parser.add_argument(
         "--provider-kind",
         default="openai",
-        choices=["openai", "openai-compatible", "ollama"],
+        choices=["openai", "openai-compatible", "ollama", "mock-llm"],
         help="LLM provider kind.",
     )
     digest_parser.add_argument("--model", required=True, help="Model name to invoke.")
@@ -93,7 +93,7 @@ def _read_api_key_file(path_value: str) -> str:
 
 
 def _resolve_api_key(args: argparse.Namespace) -> str:
-    if args.provider_kind == "ollama":
+    if args.provider_kind in {"ollama", "mock-llm"}:
         return ""
     if args.api_key_file:
         return _read_api_key_file(args.api_key_file)
