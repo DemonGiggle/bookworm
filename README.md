@@ -1,8 +1,17 @@
 # Bookworm Digester
 
-Bookworm Digester ingests source documents, incrementally digests them through an LLM-guided loop, writes completed section-like skill files as soon as a topic cluster is finalized, and emits an `INDEX.md` for downstream human or agent workflows.
+Bookworm Digester ingests source documents, incrementally digests them through an LLM-guided loop, and writes completed section-like skill files into agent-native skill directories for downstream Copilot, OpenCode, and Codex workflows.
 
 Each output file is meant to behave like a reusable skill file for another agent: focused enough to stand alone, but still traceable back to the source material.
+
+By default, each run writes three directories beneath the chosen output directory:
+
+```text
+out/
+├── copilot/.github/skills/<skill-name>/SKILL.md
+├── opencode/.opencode/skills/<skill-name>/SKILL.md
+└── codex/.agents/skills/<skill-name>/SKILL.md
+```
 
 ## Supported inputs
 

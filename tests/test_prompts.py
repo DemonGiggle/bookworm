@@ -35,7 +35,7 @@ def test_digest_prompts_preserve_setup_and_hardware_detail() -> None:
     assert "hardware installation steps" in system_prompt
     assert "section-level skill file" in system_prompt
     assert "Codex, Claude Code, and Copilot" in system_prompt
-    assert "INDEX.md" in system_prompt
+    assert "SKILL.md description" in system_prompt
     assert "routing-friendly purpose statements" in system_prompt
     assert "setup sequences" in user_prompt
     assert "verification steps" in user_prompt

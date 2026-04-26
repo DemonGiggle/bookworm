@@ -16,7 +16,7 @@ def build_digest_system_prompt() -> str:
         "Return strict JSON with keys: topic_updates, should_continue, rationale. "
         "Each topic update must include slug, title, summary, key_points, references. "
         "references must contain source_id, source_path, locator. "
-        "Treat each topic like a section-level skill file that another agent could route to from an INDEX.md and reuse on its own. "
+        "Treat each topic like a section-level skill file that another agent could discover from a SKILL.md description and reuse on its own. "
         "Write summaries as routing-friendly purpose statements: what task the skill helps with, what context it preserves, and when an agent should load it. "
         "Write key_points as actionable instructions, constraints, workflow steps, commands, checks, or caveats, not vague observations. "
         "Set should_continue to false only when the current visible topics already have strong coverage and the next chunks are more likely to introduce different topics than extend these ones."

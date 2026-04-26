@@ -141,9 +141,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             progress_reporter=reporter,
         )
         result = digester.digest_paths(args.inputs, args.output_dir)
+        agent_targets = len([key for key in result.artifact_paths if ":" not in key])
         print(
-            "Wrote {count} skill files plus INDEX.md to {output_dir}".format(
+            "Wrote {count} skill(s) for {agents} agent target(s) to {output_dir}".format(
                 count=len(result.topics),
+                agents=agent_targets,
                 output_dir=args.output_dir,
             )
         )
