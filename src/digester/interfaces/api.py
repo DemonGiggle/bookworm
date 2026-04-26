@@ -34,16 +34,31 @@ class DocumentDigester:
             normalized_paths,
             progress_reporter=self.progress_reporter,
         )
+        self.progress_reporter.persist(
+            "Writing artifacts to {path}.".format(path=output_path)
+        )
+        artifact_paths = {}
+
+        def write_completed_topics(topics):
+            artifact_paths.update(
+                self.artifact_writer.write_topics(
+                    topics,
+                    output_path,
+                    progress_reporter=self.progress_reporter,
+                )
+            )
+
         result = DigestOrchestrator(
             provider=self.provider,
             config=self.config,
             progress_reporter=self.progress_reporter,
-        ).run(documents)
-        self.artifact_writer.write(
+        ).run(documents, on_topics_finalized=write_completed_topics)
+        artifact_paths["INDEX"] = self.artifact_writer.write_index(
             result,
             output_path,
             progress_reporter=self.progress_reporter,
         )
+        result.artifact_paths = artifact_paths
         self.progress_reporter.persist(
             "Finished digestion with {count} skill file(s).".format(count=len(result.topics))
         )
