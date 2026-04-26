@@ -71,20 +71,29 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
         progress_reporter=reporter,
     ).digest_paths([input_path], output_dir)
 
-    topic_text = (output_dir / "architecture.md").read_text(encoding="utf-8")
-    index_text = (output_dir / "INDEX.md").read_text(encoding="utf-8")
+    copilot_skill = output_dir / "copilot" / ".github" / "skills" / "architecture" / "SKILL.md"
+    opencode_skill = output_dir / "opencode" / ".opencode" / "skills" / "architecture" / "SKILL.md"
+    codex_skill = output_dir / "codex" / ".agents" / "skills" / "architecture" / "SKILL.md"
+    topic_text = copilot_skill.read_text(encoding="utf-8")
+    opencode_text = opencode_skill.read_text(encoding="utf-8")
 
-    assert (output_dir / "architecture.md").exists()
-    assert (output_dir / "INDEX.md").exists()
-    assert "Architecture" in index_text
-    assert "## Skill Routing" in index_text
-    assert "Use [Architecture](architecture.md) when the task involves:" in index_text
+    assert copilot_skill.exists()
+    assert opencode_skill.exists()
+    assert codex_skill.exists()
+    assert not (output_dir / "INDEX.md").exists()
+    assert 'name: architecture' in topic_text
+    assert 'description: "Use this skill when work requires Summarizes the system design and interfaces."' in topic_text
     assert "## When To Use" in topic_text
     assert "## Purpose" in topic_text
     assert "## Core Instructions" in topic_text
     assert "## Workflow Notes" in topic_text
     assert "## Source files" in topic_text
+    assert "compatibility: opencode" in opencode_text
     assert result.stop_reason == "Processed all available chunks."
+    assert result.artifact_paths["copilot"] == output_dir / "copilot"
+    assert result.artifact_paths["copilot:architecture"] == copilot_skill
+    assert result.artifact_paths["opencode:architecture"] == opencode_skill
+    assert result.artifact_paths["codex:architecture"] == codex_skill
     assert provider.calls == 3
     persisted = [message for kind, message in reporter.messages if kind == "persist"]
     assert any("Loaded source.txt with 1 section(s)." == message for message in persisted)
@@ -92,7 +101,7 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     assert any("Completed batch 3/3; tracking 1 topic(s)." == message for message in persisted)
     assert any("marked the current topic cluster as complete" in message for message in persisted)
     assert any("Finished digestion with 1 skill file(s)." == message for message in persisted)
-    assert any("Generated " in message and "architecture.md" in message for message in persisted)
+    assert any("Generated " in message and "copilot/.github/skills/architecture/SKILL.md" in message for message in persisted)
 
 
 class ManyTopicProvider(LLMProvider):
@@ -129,9 +138,10 @@ def test_document_digester_keeps_all_discovered_topics_for_export(tmp_path: Path
 
     assert len(result.topics) == 3
     assert [topic.slug for topic in result.topics] == ["skill-1", "skill-2", "skill-3"]
-    assert (output_dir / "skill-1.md").exists()
-    assert (output_dir / "skill-2.md").exists()
-    assert (output_dir / "skill-3.md").exists()
+    for slug in ("skill-1", "skill-2", "skill-3"):
+        assert (output_dir / "copilot" / ".github" / "skills" / slug / "SKILL.md").exists()
+        assert (output_dir / "opencode" / ".opencode" / "skills" / slug / "SKILL.md").exists()
+        assert (output_dir / "codex" / ".agents" / "skills" / slug / "SKILL.md").exists()
 
 
 class LimitedBatchProvider(LLMProvider):
@@ -194,16 +204,12 @@ class FinalizeEachBatchProvider(LLMProvider):
 
 class RecordingArtifactWriter(MarkdownArtifactWriter):
     def __init__(self) -> None:
+        super().__init__()
         self.topic_batches: List[List[str]] = []
-        self.index_writes = 0
 
     def write_topics(self, topics, output_dir, progress_reporter=None):
         self.topic_batches.append([topic.slug for topic in topics])
         return super().write_topics(topics, output_dir, progress_reporter)
-
-    def write_index(self, result, output_dir, progress_reporter=None):
-        self.index_writes += 1
-        return super().write_index(result, output_dir, progress_reporter)
 
 
 def test_document_digester_flushes_completed_topics_incrementally(tmp_path: Path) -> None:
@@ -224,8 +230,7 @@ def test_document_digester_flushes_completed_topics_incrementally(tmp_path: Path
 
     assert provider.finalize_calls == [["topic-1"], ["topic-2"], ["topic-3"]]
     assert writer.topic_batches == [["topic-1"], ["topic-2"], ["topic-3"]]
-    assert writer.index_writes == 1
     assert [topic.slug for topic in result.topics] == ["topic-1", "topic-2", "topic-3"]
-    assert (output_dir / "topic-1.md").exists()
-    assert (output_dir / "topic-2.md").exists()
-    assert (output_dir / "topic-3.md").exists()
+    assert (output_dir / "copilot" / ".github" / "skills" / "topic-1" / "SKILL.md").exists()
+    assert (output_dir / "copilot" / ".github" / "skills" / "topic-2" / "SKILL.md").exists()
+    assert (output_dir / "copilot" / ".github" / "skills" / "topic-3" / "SKILL.md").exists()

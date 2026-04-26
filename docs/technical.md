@@ -9,7 +9,7 @@ Bookworm Digester is a Python package that converts heterogeneous document sourc
 3. **Chunking** converts document sections into bounded units for incremental LLM digestion.
 4. **Digest orchestration** loops through chunk batches, updating a topic map and asking the provider whether the currently visible topics likely continue into adjacent chunks.
 5. **Provider abstraction** isolates prompt construction from LLM transport details.
-6. **Artifact generation** writes one markdown file per discovered skill file plus a navigational `INDEX.md`.
+6. **Artifact generation** writes agent-native `SKILL.md` exports for the supported Copilot, OpenCode, and Codex directory layouts.
 
 This design keeps the core workflow stable while allowing new source types and new LLM backends to be added without rewriting the pipeline.
 
@@ -416,33 +416,26 @@ This makes local-model development straightforward without forcing users through
 
 Markdown writing lives in `src/digester/core/artifacts.py`.
 
-### 10.1 Topic Files
+### 10.1 Agent Skill Files
 
-Each topic file contains:
+Each generated `SKILL.md` contains:
 
-1. H1 title
-2. `## When To Use`
-3. `## Purpose`
-4. `## Core Instructions`
-5. `## Workflow Notes`
-6. `## Source files`
-7. `## Source references`
+1. YAML frontmatter with `name` and `description`
+2. H1 title
+3. `## When To Use`
+4. `## Purpose`
+5. `## Core Instructions`
+6. `## Workflow Notes`
+7. `## Source files`
+8. `## Source references`
 
-Filename convention:
+Directory conventions:
 
-- `{slug}.md`
+- `copilot/.github/skills/{slug}/SKILL.md`
+- `opencode/.opencode/skills/{slug}/SKILL.md`
+- `codex/.agents/skills/{slug}/SKILL.md`
 
-### 10.2 INDEX.md
-
-`INDEX.md` contains:
-
-- skill routing guidance
-- skill links
-- first-line skill summary preview
-- input source list
-- final stop reason from the orchestrator
-
-This file is the navigation layer meant to help a coding agent or human quickly identify which skill files matter before loading only the relevant markdown artifacts.
+The description/frontmatter acts as the routing layer for downstream agents, so the runtime no longer emits a separate top-level `INDEX.md`.
 
 ## 11. Public Interfaces
 
@@ -467,6 +460,8 @@ provider = create_provider(
 digester = DocumentDigester(provider=provider)
 result = digester.digest_paths(["./docs/report.pdf"], "./out")
 ```
+
+`result.artifact_paths` contains the generated agent root directories (`copilot`, `opencode`, `codex`) plus per-skill `SKILL.md` paths keyed as `<agent>:<topic-slug>`.
 
 ### 11.2 CLI
 

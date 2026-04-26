@@ -53,11 +53,6 @@ class DocumentDigester:
             config=self.config,
             progress_reporter=self.progress_reporter,
         ).run(documents, on_topics_finalized=write_completed_topics)
-        artifact_paths["INDEX"] = self.artifact_writer.write_index(
-            result,
-            output_path,
-            progress_reporter=self.progress_reporter,
-        )
         result.artifact_paths = artifact_paths
         self.progress_reporter.persist(
             "Finished digestion with {count} skill file(s).".format(count=len(result.topics))

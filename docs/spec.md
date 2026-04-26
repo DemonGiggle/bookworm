@@ -2,7 +2,7 @@
 
 ## 1. Product Definition
 
-Bookworm Digester is a document digestion system that ingests heterogeneous files, progressively reads their content through an LLM-guided loop, and emits a corpus-sized set of markdown skill files plus a final `INDEX.md`. The output is optimized for two audiences:
+Bookworm Digester is a document digestion system that ingests heterogeneous files, progressively reads their content through an LLM-guided loop, and emits agent-native skill directories for downstream tools such as Copilot, OpenCode, and Codex. The output is optimized for two audiences:
 
 1. **humans** who need a fast map of the source material
 2. **downstream LLM agents** that need high-signal context without paying to reread the original corpus
@@ -21,7 +21,7 @@ Raw documents are expensive for people and LLMs to consume:
 Bookworm Digester solves this by converting source material into:
 
 - a set of **section-like markdown skill files**
-- a single **`INDEX.md`** that tells readers what exists and what to read next
+- a set of **agent-native skill directory trees** that make those skills directly loadable by supported agent tools
 
 ## 3. Goals
 
@@ -53,11 +53,11 @@ Bookworm Digester solves this by converting source material into:
 
 ### 5.1 Engineering Agents
 
-An engineering agent should be able to read `INDEX.md`, identify relevant skill files, then load only the linked markdown files needed for a coding task.
+An engineering agent should be able to discover the generated `SKILL.md` files from its native skill root, use their descriptions to decide what to load, then read only the relevant skill bodies needed for a coding task.
 
 ### 5.2 Human Researchers or Analysts
 
-A human should be able to scan the index, open the most relevant skill files, and avoid reading full source files unless provenance indicates a deeper check is necessary.
+A human should be able to scan the generated skill directories, open the most relevant skill files, and avoid reading full source files unless provenance indicates a deeper check is necessary.
 
 ### 5.3 Automation Pipelines
 
@@ -86,33 +86,34 @@ Other Python code should be able to call the library API to digest files as part
 
 ### 7.1 Required Outputs
 
-For each successful digestion run, the system must write:
+For each successful digestion run, the system must write three agent-targeted output directories by default:
 
-1. **one markdown file per discovered section-like skill**
-2. **`INDEX.md`**
+1. **`copilot/.github/skills/<skill>/SKILL.md`**
+2. **`opencode/.opencode/skills/<skill>/SKILL.md`**
+3. **`codex/.agents/skills/<skill>/SKILL.md`**
 
 ### 7.2 Topic File Requirements
 
-Each topic markdown file must contain:
+Each generated `SKILL.md` file must contain:
 
 - a stable topic title
+- YAML frontmatter with the skill name and routing description
 - when-to-use guidance that tells a downstream agent when to load the skill
 - a concise purpose summary
 - a list of durable, actionable core instructions
 - workflow notes for using the skill safely with live repository context
 - a list of source references
 
-Each topic file should be independently useful as a reusable skill-style artifact for coding agents such as Codex, Claude Code, and Copilot.
+Each topic file should be independently useful as a reusable skill-style artifact for coding agents such as Codex, Claude Code, Copilot, and OpenCode.
 
-### 7.3 INDEX.md Requirements
+### 7.3 Agent Export Layout Requirements
 
-`INDEX.md` must contain:
+The agent export layer must:
 
-- links to generated topic files
-- routing guidance that tells agents which skill file to load for a task
-- a short preview line for each skill
-- the list of original source inputs
-- a textual stop reason describing why the digestion loop ended
+- create one directory per supported agent target
+- arrange each skill as `<agent-root>/<skill-name>/SKILL.md` beneath that tool's native discovery path
+- preserve routing guidance in `SKILL.md` frontmatter descriptions and body content
+- preserve source provenance inside each generated skill body
 
 ## 8. Functional Requirements
 
@@ -180,7 +181,7 @@ Output should be organized around section-like topics / skills, not around raw c
 
 ### 9.2.1 Agent-Skill Usability
 
-Generated files should help coding agents decide what to read and how to act. `INDEX.md` should behave as the router, while each skill file should state when to use it, what instructions matter, what workflow notes or caveats apply, and where to verify source provenance.
+Generated files should help coding agents decide what to read and how to act. The skill directory layout plus each `SKILL.md` description should behave as the router, while each skill file should state when to use it, what instructions matter, what workflow notes or caveats apply, and where to verify source provenance.
 
 ### 9.3 Provenance
 
@@ -319,8 +320,8 @@ The system is considered acceptable when it can:
 3. Produce one or more chunks
 4. Call the provider through the abstract interface
 5. Accumulate at least one topic
-6. Write skill-file markdown outputs
-7. Write `INDEX.md`
+6. Write skill-file markdown outputs in supported agent-native layouts
+7. Emit the default Copilot, OpenCode, and Codex export trees
 8. Expose the same core behavior through CLI and library API
 
 ## 16. Quality Attributes
@@ -400,4 +401,4 @@ Bookworm Digester is specified as a **multi-format, LLM-guided context compresso
 - adaptive digestion loop
 - provider abstraction
 - concise markdown outputs
-- navigational `INDEX.md`
+- agent-native skill directory exports
