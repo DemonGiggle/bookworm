@@ -8,3 +8,6 @@ class OpenAICompatibleProvider(OpenAIProvider):
         if not base_url:
             raise ValueError("A base URL is required for openai-compatible providers.")
         super().__init__(model=model, api_key=api_key, base_url=base_url)
+
+    def validate_configuration(self) -> None:
+        return None

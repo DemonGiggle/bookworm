@@ -7,6 +7,9 @@ from ..core.models import DigestBatchRequest, DigestDecision, TopicDigest
 
 
 class LLMProvider(ABC):
+    def validate_configuration(self) -> None:
+        return None
+
     @abstractmethod
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         raise NotImplementedError

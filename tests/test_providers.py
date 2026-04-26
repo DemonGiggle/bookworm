@@ -1,11 +1,15 @@
 import json
+from types import SimpleNamespace
 from urllib.error import URLError
 
+import httpx
 import pytest
+from openai import PermissionDeniedError
 
 from digester.core.models import DigestBatchRequest, DigestConfig, SourceRef, TopicDigest
 from digester.providers import ProviderSettings, create_provider
 from digester.providers.ollama_provider import OllamaProvider, _normalize_base_url
+from digester.providers.openai_provider import OpenAIProvider
 
 
 def test_create_provider_builds_ollama_provider() -> None:
@@ -102,4 +106,60 @@ def test_ollama_provider_reports_connection_failure(monkeypatch) -> None:
                     references=[SourceRef(source_id="source", source_path="/tmp/source.txt", locator="full-document")],
                 )
             ]
+        )
+
+
+def test_openai_provider_validate_configuration_reports_model_access(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    request = httpx.Request("GET", "https://api.openai.com/v1/models/gpt-5-nano")
+    response = httpx.Response(
+        403,
+        request=request,
+        json={
+            "error": {
+                "message": "Project `proj_test` does not have access to model `gpt-5-nano`",
+                "code": "model_not_found",
+            }
+        },
+    )
+    error = PermissionDeniedError("Error code: 403", response=response, body=response.json())
+    fake_client = SimpleNamespace(
+        models=SimpleNamespace(retrieve=lambda model: (_ for _ in ()).throw(error))
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+
+    with pytest.raises(ValueError, match="does not have access to model gpt-5-nano"):
+        provider.validate_configuration()
+
+
+def test_openai_provider_digest_batch_reports_model_access(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+    response = httpx.Response(
+        403,
+        request=request,
+        json={
+            "error": {
+                "message": "Project `proj_test` does not have access to model `gpt-5-nano`",
+                "code": "model_not_found",
+            }
+        },
+    )
+    error = PermissionDeniedError("Error code: 403", response=response, body=response.json())
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=lambda **kwargs: (_ for _ in ()).throw(error))
+        )
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+
+    with pytest.raises(ValueError, match="does not have access to model gpt-5-nano"):
+        provider.digest_batch(
+            DigestBatchRequest(
+                config=DigestConfig(),
+                batch_number=1,
+                total_batches=1,
+                chunk_batch=[],
+                current_topics=[],
+            )
         )
