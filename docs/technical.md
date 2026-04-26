@@ -254,8 +254,10 @@ The orchestrator lives in `src/digester/core/orchestrator.py`.
    - pass the currently active topics and new chunks to the provider
    - merge returned topic updates into the in-memory topic map
    - treat `should_continue` as guidance about whether the visible topics likely continue into nearby chunks
-4. Ask the provider to finalize topics for export
-5. Return a `DigestResult`
+4. When the provider marks the visible topic cluster complete, finalize that cluster for export and clear it from the active in-memory map
+5. Write completed topic files incrementally
+6. Finalize any remaining active topics after the last batch
+7. Return a `DigestResult`
 
 ### 7.2 Stop Conditions
 
