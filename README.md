@@ -20,11 +20,23 @@ Each output file is meant to behave like a reusable skill file for another agent
 ## CLI example
 
 ```bash
+export OPENAI_API_KEY=your-api-key
+
 bookworm digest docs/*.txt \
   --output-dir out \
   --provider-kind openai \
   --model gpt-4.1-mini \
-  --api-key "$OPENAI_API_KEY" \
+  --max-active-topics 16
+```
+
+You can also keep the key in a file and point the CLI at it:
+
+```bash
+bookworm digest docs/*.txt \
+  --output-dir out \
+  --provider-kind openai \
+  --model gpt-4.1-mini \
+  --api-key-file ~/.config/bookworm/openai.key \
   --max-active-topics 16
 ```
 

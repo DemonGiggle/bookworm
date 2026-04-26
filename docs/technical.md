@@ -476,9 +476,13 @@ Supported command:
 bookworm digest INPUT [INPUT ...] \
   --output-dir OUT \
   --provider-kind openai \
-  --model gpt-4.1-mini \
-  --api-key "$OPENAI_API_KEY"
+  --model gpt-4.1-mini
 ```
+
+For hosted providers, the CLI reads credentials from `OPENAI_API_KEY` by default. It also supports:
+
+- `--api-key-env` to select a different environment variable
+- `--api-key-file` to read the API key from a file that contains only the key
 
 Tunable runtime parameters:
 
@@ -492,7 +496,8 @@ Provider-specific parameters:
 
 - `--provider-kind`
 - `--model`
-- `--api-key`
+- `--api-key-env`
+- `--api-key-file`
 - `--base-url`
 - `--organization`
 - `--ollama-host`

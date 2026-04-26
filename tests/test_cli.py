@@ -27,6 +27,7 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
     input_path = tmp_path / "notes.txt"
     input_path.write_text("A concise document.", encoding="utf-8")
     output_dir = tmp_path / "artifacts"
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
 
     monkeypatch.setattr(
         cli,
@@ -42,8 +43,6 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
             str(output_dir),
             "--model",
             "fake-model",
-            "--api-key",
-            "fake-key",
         ]
     )
 
@@ -56,6 +55,69 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
     assert "Completed batch 1/1; tracking 1 topic(s)." in captured.err
     assert "Finished digestion with 1 skill file(s)." in captured.err
     assert "Generated" in captured.err
+
+
+def test_cli_reads_api_key_from_file(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    api_key_path = tmp_path / "openai.key"
+    api_key_path.write_text("file-key\n", encoding="utf-8")
+    seen = {}
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["api_key"] = settings.api_key
+        return CliFakeProvider()
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--model",
+            "fake-model",
+            "--api-key-file",
+            str(api_key_path),
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen["api_key"] == "file-key"
+
+
+def test_cli_reads_api_key_from_custom_environment_variable(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    seen = {}
+    monkeypatch.setenv("BOOKWORM_OPENAI_API_KEY", "custom-key")
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["api_key"] = settings.api_key
+        return CliFakeProvider()
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--model",
+            "fake-model",
+            "--api-key-env",
+            "BOOKWORM_OPENAI_API_KEY",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen["api_key"] == "custom-key"
 
 
 def test_cli_passes_ollama_host_and_port(monkeypatch, tmp_path: Path, capsys) -> None:

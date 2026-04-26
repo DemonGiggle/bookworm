@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 from typing import Optional, Sequence
 
 from ..core import DigestConfig
@@ -24,7 +25,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="LLM provider kind.",
     )
     digest_parser.add_argument("--model", required=True, help="Model name to invoke.")
-    digest_parser.add_argument("--api-key", default=os.getenv("OPENAI_API_KEY", ""), help="Provider API key.")
+    credential_parser = digest_parser.add_mutually_exclusive_group()
+    credential_parser.add_argument(
+        "--api-key-file",
+        help="Path to a file that contains only the provider API key.",
+    )
+    credential_parser.add_argument(
+        "--api-key-env",
+        help="Environment variable to read the provider API key from. Defaults to OPENAI_API_KEY.",
+    )
     digest_parser.add_argument(
         "--base-url",
         default=os.getenv("DIGESTER_BASE_URL", ""),
@@ -74,6 +83,31 @@ def _provider_message(args: argparse.Namespace) -> str:
     )
 
 
+def _read_api_key_file(path_value: str) -> str:
+    api_key = Path(path_value).read_text(encoding="utf-8").strip()
+    if not api_key:
+        raise ValueError("API key file is empty.")
+    if "\n" in api_key or "\r" in api_key:
+        raise ValueError("API key file must contain only the API key.")
+    return api_key
+
+
+def _resolve_api_key(args: argparse.Namespace) -> str:
+    if args.provider_kind == "ollama":
+        return ""
+    if args.api_key_file:
+        return _read_api_key_file(args.api_key_file)
+    env_var_name = args.api_key_env or "OPENAI_API_KEY"
+    api_key = os.getenv(env_var_name, "").strip()
+    if not api_key:
+        raise ValueError(
+            "An API key is required. Set {env_var} or pass --api-key-file.".format(
+                env_var=env_var_name
+            )
+        )
+    return api_key
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -86,7 +120,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ProviderSettings(
             provider_kind=args.provider_kind,
             model=args.model,
-            api_key=args.api_key,
+            api_key=_resolve_api_key(args),
             base_url=args.base_url or None,
             organization=args.organization or None,
             ollama_host=args.ollama_host,
