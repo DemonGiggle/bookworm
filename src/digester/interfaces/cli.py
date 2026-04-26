@@ -115,34 +115,40 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         parser.error("Unknown command.")
 
     reporter = ConsoleProgressReporter()
-    reporter.persist(_provider_message(args))
-    provider = create_provider(
-        ProviderSettings(
-            provider_kind=args.provider_kind,
-            model=args.model,
-            api_key=_resolve_api_key(args),
-            base_url=args.base_url or None,
-            organization=args.organization or None,
-            ollama_host=args.ollama_host,
-            ollama_port=args.ollama_port,
+    try:
+        reporter.persist(_provider_message(args))
+        provider = create_provider(
+            ProviderSettings(
+                provider_kind=args.provider_kind,
+                model=args.model,
+                api_key=_resolve_api_key(args),
+                base_url=args.base_url or None,
+                organization=args.organization or None,
+                ollama_host=args.ollama_host,
+                ollama_port=args.ollama_port,
+            )
         )
-    )
-    digester = DocumentDigester(
-        provider=provider,
-        config=DigestConfig(
-            max_chunk_chars=args.max_chunk_chars,
-            batch_size=args.batch_size,
-            minimum_batches_before_stop=args.minimum_batches_before_stop,
-            max_batches=args.max_batches,
-            max_active_topics=args.max_active_topics,
-        ),
-        progress_reporter=reporter,
-    )
-    result = digester.digest_paths(args.inputs, args.output_dir)
-    print(
-        "Wrote {count} skill files plus INDEX.md to {output_dir}".format(
-            count=len(result.topics),
-            output_dir=args.output_dir,
+        provider.validate_configuration()
+        digester = DocumentDigester(
+            provider=provider,
+            config=DigestConfig(
+                max_chunk_chars=args.max_chunk_chars,
+                batch_size=args.batch_size,
+                minimum_batches_before_stop=args.minimum_batches_before_stop,
+                max_batches=args.max_batches,
+                max_active_topics=args.max_active_topics,
+            ),
+            progress_reporter=reporter,
         )
-    )
-    return 0
+        result = digester.digest_paths(args.inputs, args.output_dir)
+        print(
+            "Wrote {count} skill files plus INDEX.md to {output_dir}".format(
+                count=len(result.topics),
+                output_dir=args.output_dir,
+            )
+        )
+        return 0
+    except ValueError as error:
+        reporter.clear()
+        reporter.persist("Error: {message}".format(message=error))
+        return 1

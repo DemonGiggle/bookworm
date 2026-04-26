@@ -7,6 +7,12 @@ from digester.providers.base import LLMProvider
 
 
 class CliFakeProvider(LLMProvider):
+    def __init__(self) -> None:
+        self.validation_calls = 0
+
+    def validate_configuration(self) -> None:
+        self.validation_calls += 1
+
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         return DigestDecision(
             topic_updates=[
@@ -55,6 +61,59 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
     assert "Completed batch 1/1; tracking 1 topic(s)." in captured.err
     assert "Finished digestion with 1 skill file(s)." in captured.err
     assert "Generated" in captured.err
+
+
+def test_cli_validates_provider_before_digestion(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    provider = CliFakeProvider()
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
+    monkeypatch.setattr(cli, "create_provider", lambda settings: provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--model",
+            "fake-model",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert provider.validation_calls == 1
+
+
+def test_cli_reports_validation_errors_without_traceback(monkeypatch, tmp_path: Path, capsys) -> None:
+    class FailingProvider(CliFakeProvider):
+        def validate_configuration(self) -> None:
+            raise ValueError("OpenAI project does not have access to model fake-model.")
+
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
+    monkeypatch.setattr(cli, "create_provider", lambda settings: FailingProvider())
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--model",
+            "fake-model",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Error: OpenAI project does not have access to model fake-model." in captured.err
+    assert "Starting digestion" not in captured.err
+    assert captured.out == ""
 
 
 def test_cli_reads_api_key_from_file(monkeypatch, tmp_path: Path, capsys) -> None:
