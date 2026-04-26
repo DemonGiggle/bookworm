@@ -238,6 +238,8 @@ def test_cli_mock_llm_runs_without_api_key(tmp_path: Path, monkeypatch, capsys) 
             "mock-llm",
             "--model",
             "fake-model",
+            "--batch-size",
+            "1",
         ]
     )
 
@@ -248,6 +250,43 @@ def test_cli_mock_llm_runs_without_api_key(tmp_path: Path, monkeypatch, capsys) 
     assert (output_dir / "codex" / ".agents" / "skills" / "mock-notes" / "SKILL.md").exists()
     assert "Using provider mock-llm with model fake-model." in captured.err
     assert "Wrote 1 skill(s) for 3 agent target(s)" in captured.out
+
+
+def test_cli_mock_llm_writes_distinct_skills_for_duplicate_source_stems(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    first_dir = tmp_path / "first"
+    second_dir = tmp_path / "second"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first_input = first_dir / "notes.txt"
+    second_input = second_dir / "notes.txt"
+    first_input.write_text("Alpha content.", encoding="utf-8")
+    second_input.write_text("Beta content.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(first_input),
+            str(second_input),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    for slug in ("mock-notes", "mock-notes-2"):
+        assert (output_dir / "copilot" / ".github" / "skills" / slug / "SKILL.md").exists()
+        assert (output_dir / "opencode" / ".opencode" / "skills" / slug / "SKILL.md").exists()
+        assert (output_dir / "codex" / ".agents" / "skills" / slug / "SKILL.md").exists()
+    assert "Wrote 2 skill(s) for 3 agent target(s)" in captured.out
 
 
 def test_cli_max_topics_flag_is_kept_as_compatibility_alias() -> None:

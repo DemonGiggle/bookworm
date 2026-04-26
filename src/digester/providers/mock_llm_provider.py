@@ -28,6 +28,25 @@ def _titleize(value: str) -> str:
 class MockLLMProvider(LLMProvider):
     def __init__(self, model: str) -> None:
         self.model = model
+        self._topic_slugs_by_source: Dict[Tuple[str, str], str] = {}
+        self._used_topic_slugs: Set[str] = set()
+
+    def _topic_slug_for(self, source_id: str, source_path: str) -> str:
+        key = (source_id, source_path)
+        existing = self._topic_slugs_by_source.get(key)
+        if existing is not None:
+            return existing
+
+        base_slug = "mock-{source_id}".format(source_id=_slugify(source_id))
+        candidate = base_slug
+        suffix = 2
+        while candidate in self._used_topic_slugs:
+            candidate = "{base_slug}-{suffix}".format(base_slug=base_slug, suffix=suffix)
+            suffix += 1
+
+        self._used_topic_slugs.add(candidate)
+        self._topic_slugs_by_source[key] = candidate
+        return candidate
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         if not request.chunk_batch:
@@ -58,7 +77,7 @@ class MockLLMProvider(LLMProvider):
             label = _source_label(source_id=source_id, source_path=source_path)
             topic_updates.append(
                 TopicDigest(
-                    slug="mock-{source_id}".format(source_id=_slugify(source_id)),
+                    slug=self._topic_slug_for(source_id=source_id, source_path=source_path),
                     title="Mock {label}".format(label=_titleize(label)),
                     summary=(
                         "end-to-end validation for {label} without a real LLM response.\n\n"
