@@ -210,7 +210,8 @@ bookworm digest INPUT [INPUT ...] --output-dir OUT --model MODEL
 It must also accept:
 
 - `--provider-kind`
-- `--api-key`
+- `--api-key-file`
+- `--api-key-env`
 - `--base-url`
 - `--organization`
 - `--ollama-host`
@@ -220,6 +221,8 @@ It must also accept:
 - `--minimum-batches-before-stop`
 - `--max-batches`
 - `--max-active-topics` (with `--max-topics` retained as a compatibility alias)
+
+Hosted providers must load their API key from an environment variable (defaulting to `OPENAI_API_KEY`, with `--api-key-env` allowing an override) or from a file passed via `--api-key-file`. Raw API keys must not be accepted directly on the command line.
 
 When `--provider-kind ollama` is selected, the CLI must:
 
