@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import List
 
+import pytest
+
 from digester.core import DigestConfig
 from digester.core.models import DigestBatchRequest, DigestDecision, TopicDigest
 from digester.interfaces.api import DocumentDigester
@@ -244,8 +246,81 @@ def test_document_digester_flushes_completed_topics_incrementally(tmp_path: Path
     ).digest_paths([input_path], output_dir)
 
     assert provider.finalize_calls == [["topic-1"], ["topic-2"], ["topic-3"]]
-    assert writer.topic_batches == [["topic-1"], ["topic-2"], ["topic-3"]]
+    assert writer.topic_batches == [
+        ["topic-1"],
+        ["topic-1"],
+        ["topic-2"],
+        ["topic-2"],
+        ["topic-3"],
+        ["topic-3"],
+    ]
     assert [topic.slug for topic in result.topics] == ["topic-1", "topic-2", "topic-3"]
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-1" / "SKILL.md").exists()
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-2" / "SKILL.md").exists()
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-3" / "SKILL.md").exists()
+
+
+def test_document_digester_persists_in_progress_topics_after_each_batch(tmp_path: Path) -> None:
+    input_path = tmp_path / "topics.txt"
+    input_path.write_text(
+        "Topic one.\n\nTopic two.\n\nTopic three.",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "out"
+    writer = RecordingArtifactWriter()
+
+    result = DocumentDigester(
+        provider=LimitedBatchProvider(),
+        config=DigestConfig(max_chunk_chars=20, batch_size=1, max_batches=2),
+        artifact_writer=writer,
+    ).digest_paths([input_path], output_dir)
+
+    assert writer.topic_batches == [
+        ["topics-chunk-1"],
+        ["topics-chunk-1", "topics-chunk-2"],
+        ["topics-chunk-1", "topics-chunk-2"],
+    ]
+    assert [topic.slug for topic in result.topics] == ["topics-chunk-1", "topics-chunk-2"]
+    assert (output_dir / "copilot" / ".github" / "skills" / "topics-chunk-1" / "SKILL.md").exists()
+    assert (output_dir / "copilot" / ".github" / "skills" / "topics-chunk-2" / "SKILL.md").exists()
+
+
+class EmptyFinalizeProvider(LLMProvider):
+    def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
+        chunk = request.chunk_batch[0]
+        return DigestDecision(
+            topic_updates=[
+                TopicDigest(
+                    slug="recovered-topic",
+                    title="Recovered Topic",
+                    summary="Summary retained before finalization failed.",
+                    key_points=["Keep the partial artifact on disk."],
+                    references=[chunk.source_ref],
+                )
+            ],
+            should_continue=False,
+            rationale="This topic is complete.",
+        )
+
+    def finalize_topics(self, topics: List[TopicDigest]) -> List[TopicDigest]:
+        return []
+
+
+def test_document_digester_keeps_in_progress_files_when_finalize_fails(tmp_path: Path) -> None:
+    input_path = tmp_path / "topics.txt"
+    input_path.write_text("Topic one.", encoding="utf-8")
+    output_dir = tmp_path / "out"
+    reporter = RecordingReporter()
+
+    with pytest.raises(ValueError, match="The provider returned no topics for the supplied corpus."):
+        DocumentDigester(
+            provider=EmptyFinalizeProvider(),
+            config=DigestConfig(max_chunk_chars=20, batch_size=1, minimum_batches_before_stop=1),
+            progress_reporter=reporter,
+        ).digest_paths([input_path], output_dir)
+
+    skill_path = output_dir / "copilot" / ".github" / "skills" / "recovered-topic" / "SKILL.md"
+    assert skill_path.exists()
+    persisted = [message for kind, message in reporter.messages if kind == "persist"]
+    assert any("Persisting 1 in-progress topic digest(s)." == message for message in persisted)
+    assert any("Persisting 1 in-progress topic digest(s) after an error." == message for message in persisted)

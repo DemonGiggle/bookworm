@@ -1,6 +1,6 @@
 # Bookworm Digester
 
-Bookworm Digester ingests source documents, incrementally digests them through an LLM-guided loop, and writes completed section-like skill files into agent-native skill directories for downstream Copilot, OpenCode, and Codex workflows.
+Bookworm Digester ingests source documents, incrementally digests them through an LLM-guided loop, and writes section-like skill files into agent-native skill directories for downstream Copilot, OpenCode, and Codex workflows as topics evolve and then finalize.
 
 Each output file is meant to behave like a reusable skill file for another agent: focused enough to stand alone, but still traceable back to the source material.
 
@@ -89,4 +89,4 @@ bookworm digest docs/*.txt \
 
 ## Loop semantics
 
-The digester always keeps processing remaining chunks unless it hits `--max-batches`. The provider's `should_continue` flag is narrower: it tells the orchestrator whether the **currently visible** section-like topics likely continue into adjacent chunks, not whether the whole corpus is finished. When the provider marks the visible cluster complete, Bookworm finalizes and writes those topic files immediately, then continues scanning later chunks for new topics. That keeps long runs from holding every completed topic in memory until the very end.
+The digester always keeps processing remaining chunks unless it hits `--max-batches`. The provider's `should_continue` flag is narrower: it tells the orchestrator whether the **currently visible** section-like topics likely continue into adjacent chunks, not whether the whole corpus is finished. After each batch, Bookworm rewrites the current in-progress skill files so partial progress is preserved on disk. When the provider marks the visible cluster complete, Bookworm finalizes and rewrites those topic files immediately, then continues scanning later chunks for new topics. If finalization fails, Bookworm leaves the latest in-progress files on disk before surfacing the error.
