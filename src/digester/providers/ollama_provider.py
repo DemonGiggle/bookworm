@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Dict, List
+from typing import Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -40,7 +40,7 @@ class OllamaProvider(LLMProvider):
         model: str,
         host: str = "127.0.0.1",
         port: int = 11434,
-        timeout_seconds: int = 120,
+        timeout_seconds: Optional[int] = None,
     ) -> None:
         self.model = model
         self.host = host
@@ -67,7 +67,11 @@ class OllamaProvider(LLMProvider):
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            if self.timeout_seconds is None:
+                response_context = urlopen(request)
+            else:
+                response_context = urlopen(request, timeout=self.timeout_seconds)
+            with response_context as response:
                 body = response.read().decode("utf-8")
         except HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")

@@ -19,6 +19,7 @@ class ProviderSettings:
     organization: Optional[str] = None
     ollama_host: str = "127.0.0.1"
     ollama_port: int = 11434
+    timeout_seconds: Optional[int] = None
 
 
 def create_provider(settings: ProviderSettings) -> LLMProvider:
@@ -39,6 +40,7 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             model=settings.model,
             host=settings.ollama_host,
             port=settings.ollama_port,
+            timeout_seconds=settings.timeout_seconds,
         )
     if settings.provider_kind == "mock-llm":
         return MockLLMProvider(model=settings.model)

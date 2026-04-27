@@ -55,6 +55,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=int(os.getenv("OLLAMA_PORT", "11434")),
         help="Port for the local Ollama server.",
     )
+    digest_parser.add_argument(
+        "--timeout-sc",
+        type=int,
+        default=None,
+        help="Optional request timeout in seconds for Ollama requests. Defaults to no timeout.",
+    )
     digest_parser.add_argument("--max-chunk-chars", type=int, default=1800)
     digest_parser.add_argument("--batch-size", type=int, default=2)
     digest_parser.add_argument("--minimum-batches-before-stop", type=int, default=2)
@@ -126,6 +132,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 organization=args.organization or None,
                 ollama_host=args.ollama_host,
                 ollama_port=args.ollama_port,
+                timeout_seconds=args.timeout_sc,
             )
         )
         provider.validate_configuration()

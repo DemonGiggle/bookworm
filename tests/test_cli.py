@@ -225,6 +225,68 @@ def test_cli_passes_ollama_host_and_port(monkeypatch, tmp_path: Path, capsys) ->
     assert "Using provider ollama (192.168.1.10:11555) with model llama3.1." in captured.err
 
 
+def test_cli_passes_ollama_timeout_when_specified(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    seen = {}
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["timeout_seconds"] = settings.timeout_seconds
+        return CliFakeProvider()
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "ollama",
+            "--model",
+            "llama3.1",
+            "--timeout-sc",
+            "600",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen["timeout_seconds"] == 600
+
+
+def test_cli_ollama_timeout_defaults_to_none(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    seen = {}
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["timeout_seconds"] = settings.timeout_seconds
+        return CliFakeProvider()
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "ollama",
+            "--model",
+            "llama3.1",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen["timeout_seconds"] is None
+
+
 def test_cli_mock_llm_runs_without_api_key(tmp_path: Path, monkeypatch, capsys) -> None:
     input_path = tmp_path / "notes.txt"
     input_path.write_text("A concise document.", encoding="utf-8")

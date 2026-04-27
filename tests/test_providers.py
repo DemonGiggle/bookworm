@@ -42,6 +42,20 @@ def test_create_provider_builds_ollama_provider() -> None:
 
     assert isinstance(provider, OllamaProvider)
     assert provider.base_url == "http://192.168.1.40:11500"
+    assert provider.timeout_seconds is None
+
+
+def test_create_provider_passes_ollama_timeout() -> None:
+    provider = create_provider(
+        ProviderSettings(
+            provider_kind="ollama",
+            model="llama3.1",
+            timeout_seconds=600,
+        )
+    )
+
+    assert isinstance(provider, OllamaProvider)
+    assert provider.timeout_seconds == 600
 
 
 def test_normalize_base_url_preserves_scheme_and_default_port() -> None:
@@ -141,7 +155,7 @@ def test_ollama_provider_digest_batch(monkeypatch) -> None:
                 }
             ).encode("utf-8")
 
-    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", lambda request, timeout: FakeResponse())
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", lambda request: FakeResponse())
 
     decision = provider.digest_batch(
         DigestBatchRequest(
@@ -160,7 +174,7 @@ def test_ollama_provider_digest_batch(monkeypatch) -> None:
 def test_ollama_provider_reports_connection_failure(monkeypatch) -> None:
     provider = OllamaProvider(model="llama3.1", host="192.168.1.50", port=11435)
 
-    def raise_error(request, timeout):
+    def raise_error(request):
         raise URLError("connection refused")
 
     monkeypatch.setattr("digester.providers.ollama_provider.urlopen", raise_error)
@@ -177,6 +191,51 @@ def test_ollama_provider_reports_connection_failure(monkeypatch) -> None:
                 )
             ]
         )
+
+
+def test_ollama_provider_uses_explicit_timeout_when_configured(monkeypatch) -> None:
+    provider = OllamaProvider(model="llama3.1", timeout_seconds=90)
+    seen = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "topic_updates": [],
+                                "should_continue": False,
+                                "rationale": "Done.",
+                            }
+                        )
+                    }
+                }
+            ).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", fake_urlopen)
+
+    provider.digest_batch(
+        DigestBatchRequest(
+            config=DigestConfig(),
+            batch_number=1,
+            total_batches=1,
+            chunk_batch=[],
+            current_topics=[],
+        )
+    )
+
+    assert seen["timeout"] == 90
 
 
 def test_openai_provider_validate_configuration_reports_model_access(monkeypatch) -> None:
