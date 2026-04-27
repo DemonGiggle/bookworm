@@ -21,6 +21,7 @@ from digester.providers.openai_provider import OpenAIProvider
 class RecordingVerboseReporter:
     def __init__(self) -> None:
         self.messages = []
+        self.verbose_level = 1
 
     def update(self, message: str) -> None:
         self.messages.append(("update", message))
@@ -30,6 +31,9 @@ class RecordingVerboseReporter:
 
     def verbose(self, message: str) -> None:
         self.messages.append(("verbose", message))
+
+    def verbosity(self) -> int:
+        return self.verbose_level
 
     def clear(self) -> None:
         self.messages.append(("clear", ""))
@@ -333,6 +337,40 @@ def test_openai_provider_verbose_logging_reports_request_and_response(monkeypatc
     assert any("request preview" in message and "[omitted 32 chars]" in message for message in verbose_messages)
     assert any("returned {count} chars in 1.75s".format(count=len(response_content)) in message for message in verbose_messages)
     assert any("response preview" in message for message in verbose_messages)
+
+
+def test_openai_provider_double_verbose_logging_keeps_full_body(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    reporter = RecordingVerboseReporter()
+    reporter.verbose_level = 2
+    provider.set_progress_reporter(reporter)
+    timing_points = iter([1.0, 1.25])
+    user_prompt = "user prompt " + ("x" * 260)
+    response_content = json.dumps(
+        {
+            "topic_updates": [],
+            "should_continue": False,
+            "rationale": "Enough context collected.",
+        }
+    )
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=response_content))]
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+    monkeypatch.setattr("digester.providers.openai_provider.perf_counter", lambda: next(timing_points))
+
+    provider._complete_json(system_prompt="system prompt", user_prompt=user_prompt)
+
+    verbose_messages = [message for kind, message in reporter.messages if kind == "verbose"]
+    assert any("request body" in message for message in verbose_messages)
+    assert any(user_prompt in message for message in verbose_messages)
+    assert not any("[omitted" in message for message in verbose_messages if "request body" in message)
 
 
 def test_openai_provider_reports_invalid_json_with_context(monkeypatch) -> None:

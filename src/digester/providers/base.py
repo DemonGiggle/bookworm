@@ -48,6 +48,10 @@ def _escaped_fragment(text: str) -> str:
     )
 
 
+def _escaped_full_text(text: str) -> str:
+    return _escaped_fragment(text)
+
+
 def _json_error_excerpt(text: str, position: int, radius: int = 80) -> str:
     start = max(position - radius, 0)
     end = min(position + radius, len(text))
@@ -77,6 +81,22 @@ class LLMProvider(ABC):
     def set_progress_reporter(self, progress_reporter: Optional[ProgressReporter]) -> None:
         self.progress_reporter = progress_reporter or NoOpProgressReporter()
 
+    def _verbosity_level(self) -> int:
+        verbosity = getattr(self.progress_reporter, "verbosity", None)
+        if callable(verbosity):
+            return int(verbosity())
+        return 0
+
+    def _format_verbose_text(self, text: str) -> str:
+        if self._verbosity_level() >= 2:
+            return _escaped_full_text(text)
+        return _escaped_preview(text)
+
+    def _verbose_text_label(self) -> str:
+        if self._verbosity_level() >= 2:
+            return "body"
+        return "preview"
+
     def _log_request(self, provider_name: str, model: str, system_prompt: str, user_prompt: str) -> None:
         system_chars = len(system_prompt)
         user_chars = len(user_prompt)
@@ -92,9 +112,10 @@ class LLMProvider(ABC):
             )
         )
         self.progress_reporter.verbose(
-            'Verbose: request preview: system="{system}" user="{user}"'.format(
-                system=_escaped_preview(system_prompt),
-                user=_escaped_preview(user_prompt),
+            'Verbose: request {label}: system="{system}" user="{user}"'.format(
+                label=self._verbose_text_label(),
+                system=self._format_verbose_text(system_prompt),
+                user=self._format_verbose_text(user_prompt),
             )
         )
 
@@ -114,8 +135,9 @@ class LLMProvider(ABC):
             )
         )
         self.progress_reporter.verbose(
-            'Verbose: response preview: "{preview}"'.format(
-                preview=_escaped_preview(response_text),
+            'Verbose: response {label}: "{preview}"'.format(
+                label=self._verbose_text_label(),
+                preview=self._format_verbose_text(response_text),
             )
         )
 

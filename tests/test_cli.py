@@ -313,7 +313,7 @@ def test_cli_passes_verbose_reporter_to_provider(monkeypatch, tmp_path: Path, ca
     capsys.readouterr()
     assert exit_code == 0
     assert isinstance(provider.progress_reporter, ConsoleProgressReporter)
-    assert provider.progress_reporter.verbose_enabled is True
+    assert provider.progress_reporter.verbosity() == 1
 
 
 def test_cli_short_verbose_flag_is_supported() -> None:
@@ -332,6 +332,84 @@ def test_cli_short_verbose_flag_is_supported() -> None:
     )
 
     assert args.verbose is True
+    assert args.vv is False
+
+
+def test_cli_double_verbose_flag_is_supported() -> None:
+    args = cli.build_parser().parse_args(
+        [
+            "digest",
+            "notes.txt",
+            "--output-dir",
+            "artifacts",
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "--vv",
+        ]
+    )
+
+    assert args.vv is True
+    assert args.verbose is False
+
+
+def test_cli_passes_double_verbose_reporter_to_provider(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    provider = CliFakeProvider()
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(cli, "create_provider", lambda settings: provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "--vv",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert isinstance(provider.progress_reporter, ConsoleProgressReporter)
+    assert provider.progress_reporter.verbosity() == 2
+
+
+def test_cli_writes_logs_to_file(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    log_path = tmp_path / "logs" / "bookworm.log"
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "--log-location",
+            str(log_path),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    log_text = log_path.read_text(encoding="utf-8")
+    assert exit_code == 0
+    assert "Using provider mock-llm with model fake-model." not in captured.err
+    assert "Using provider mock-llm with model fake-model." in log_text
+    assert "Finished digestion with 1 skill file(s)." in log_text
 
 
 def test_cli_mock_llm_runs_without_api_key(tmp_path: Path, monkeypatch, capsys) -> None:
