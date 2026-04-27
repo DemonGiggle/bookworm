@@ -66,10 +66,14 @@ bookworm digest docs/*.txt \
   --provider-kind ollama \
   --model llama3.1 \
   --ollama-host 127.0.0.1 \
-  --ollama-port 11434
+  --ollama-port 11434 \
+  --verbose
 ```
 
 If `--ollama-port` is omitted, the CLI defaults to port `11434`.
+Use `--verbose` or `-v` to print truncated LLM request and response previews, total character counts, and round-trip timing for each model call.
+Use `--vv` to log the full escaped request and response bodies without omitting the middle.
+Use `--log-location stdio|/path/to/bookworm.log` to keep logs on stdio or write them to a file. The default is `stdio`.
 
 ## MockLLM example
 

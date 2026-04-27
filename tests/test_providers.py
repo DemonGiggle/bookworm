@@ -18,6 +18,27 @@ from digester.providers.ollama_provider import OllamaProvider, _normalize_base_u
 from digester.providers.openai_provider import OpenAIProvider
 
 
+class RecordingVerboseReporter:
+    def __init__(self) -> None:
+        self.messages = []
+        self.verbose_level = 1
+
+    def update(self, message: str) -> None:
+        self.messages.append(("update", message))
+
+    def persist(self, message: str) -> None:
+        self.messages.append(("persist", message))
+
+    def verbose(self, message: str) -> None:
+        self.messages.append(("verbose", message))
+
+    def verbosity(self) -> int:
+        return self.verbose_level
+
+    def clear(self) -> None:
+        self.messages.append(("clear", ""))
+
+
 def test_create_provider_builds_mock_llm_provider() -> None:
     provider = create_provider(
         ProviderSettings(
@@ -236,6 +257,218 @@ def test_ollama_provider_uses_explicit_timeout_when_configured(monkeypatch) -> N
     )
 
     assert seen["timeout"] == 90
+
+
+def test_ollama_provider_verbose_logging_reports_request_and_response(monkeypatch) -> None:
+    provider = OllamaProvider(model="llama3.1")
+    reporter = RecordingVerboseReporter()
+    provider.set_progress_reporter(reporter)
+    timing_points = iter([10.0, 12.5])
+
+    long_system_prompt = "S" * 300
+    long_user_prompt = "U" * 280
+    response_content = json.dumps(
+        {
+            "topic_updates": [],
+            "should_continue": False,
+            "rationale": "Done.",
+        }
+    )
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"message": {"content": response_content}}).encode("utf-8")
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", lambda request: FakeResponse())
+    monkeypatch.setattr("digester.providers.ollama_provider.perf_counter", lambda: next(timing_points))
+
+    payload = provider._complete_json(
+        system_prompt=long_system_prompt,
+        user_prompt=long_user_prompt,
+    )
+
+    verbose_messages = [message for kind, message in reporter.messages if kind == "verbose"]
+    assert payload["rationale"] == "Done."
+    assert any("sending 580 chars to Ollama model llama3.1" in message for message in verbose_messages)
+    assert any("request preview" in message and "[omitted 60 chars]" in message for message in verbose_messages)
+    assert any("returned {count} chars in 2.50s".format(count=len(response_content)) in message for message in verbose_messages)
+    assert any("response preview" in message for message in verbose_messages)
+
+
+def test_openai_provider_verbose_logging_reports_request_and_response(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    reporter = RecordingVerboseReporter()
+    provider.set_progress_reporter(reporter)
+    timing_points = iter([100.0, 101.75])
+
+    response_content = json.dumps(
+        {
+            "topic_updates": [],
+            "should_continue": False,
+            "rationale": "Enough context collected.",
+        }
+    )
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=response_content))]
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+    monkeypatch.setattr("digester.providers.openai_provider.perf_counter", lambda: next(timing_points))
+
+    payload = provider._complete_json(
+        system_prompt="system prompt",
+        user_prompt="user prompt " + ("x" * 260),
+    )
+
+    verbose_messages = [message for kind, message in reporter.messages if kind == "verbose"]
+    assert payload["rationale"] == "Enough context collected."
+    assert any("sending 285 chars to OpenAI model gpt-5-nano" in message for message in verbose_messages)
+    assert any("request preview" in message and "[omitted 32 chars]" in message for message in verbose_messages)
+    assert any("returned {count} chars in 1.75s".format(count=len(response_content)) in message for message in verbose_messages)
+    assert any("response preview" in message for message in verbose_messages)
+
+
+def test_openai_provider_double_verbose_logging_keeps_full_body(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    reporter = RecordingVerboseReporter()
+    reporter.verbose_level = 2
+    provider.set_progress_reporter(reporter)
+    timing_points = iter([1.0, 1.25])
+    user_prompt = "user prompt " + ("x" * 260)
+    response_content = json.dumps(
+        {
+            "topic_updates": [],
+            "should_continue": False,
+            "rationale": "Enough context collected.",
+        }
+    )
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=response_content))]
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+    monkeypatch.setattr("digester.providers.openai_provider.perf_counter", lambda: next(timing_points))
+
+    provider._complete_json(system_prompt="system prompt", user_prompt=user_prompt)
+
+    verbose_messages = [message for kind, message in reporter.messages if kind == "verbose"]
+    assert any("request body" in message for message in verbose_messages)
+    assert any(user_prompt in message for message in verbose_messages)
+    assert not any("[omitted" in message for message in verbose_messages if "request body" in message)
+
+
+def test_openai_provider_reports_invalid_json_with_context(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    invalid_content = '{"topic_updates": [], "should_continue": false "rationale": "broken"}'
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=invalid_content))]
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+
+    with pytest.raises(ValueError) as exc_info:
+        provider.digest_batch(
+            DigestBatchRequest(
+                config=DigestConfig(),
+                batch_number=1,
+                total_batches=1,
+                chunk_batch=[],
+                current_topics=[],
+            )
+        )
+
+    message = str(exc_info.value)
+    assert "OpenAI model gpt-5-nano returned invalid JSON in the model response" in message
+    assert "Expecting ',' delimiter" in message
+    assert "Received 69 chars." in message
+    assert '<<<HERE>>>"<<<HERE>>>rationale' in message
+
+
+def test_ollama_provider_reports_invalid_model_json_with_context(monkeypatch) -> None:
+    provider = OllamaProvider(model="llama3.1")
+    invalid_content = '{"topic_updates": [], "should_continue": false "rationale": "broken"}'
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"message": {"content": invalid_content}}).encode("utf-8")
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", lambda request: FakeResponse())
+
+    with pytest.raises(ValueError) as exc_info:
+        provider.digest_batch(
+            DigestBatchRequest(
+                config=DigestConfig(),
+                batch_number=1,
+                total_batches=1,
+                chunk_batch=[],
+                current_topics=[],
+            )
+        )
+
+    message = str(exc_info.value)
+    assert "Ollama model llama3.1 returned invalid JSON in the model response" in message
+    assert "Expecting ',' delimiter" in message
+    assert "Received 69 chars." in message
+    assert '<<<HERE>>>"<<<HERE>>>rationale' in message
+
+
+def test_ollama_provider_reports_invalid_http_body_with_context(monkeypatch) -> None:
+    provider = OllamaProvider(model="llama3.1")
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"message": {"content": "oops"}'
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", lambda request: FakeResponse())
+
+    with pytest.raises(ValueError) as exc_info:
+        provider.digest_batch(
+            DigestBatchRequest(
+                config=DigestConfig(),
+                batch_number=1,
+                total_batches=1,
+                chunk_batch=[],
+                current_topics=[],
+            )
+        )
+
+    message = str(exc_info.value)
+    assert "Ollama model llama3.1 returned invalid JSON in the HTTP response body" in message
+    assert "Expecting ',' delimiter" in message
+    assert '<<<HERE>>><EOF><<<HERE>>>' in message
 
 
 def test_openai_provider_validate_configuration_reports_model_access(monkeypatch) -> None:

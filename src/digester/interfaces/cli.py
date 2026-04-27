@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional, Sequence, TextIO, Tuple
 
 from ..core import DigestConfig
 from ..providers import ProviderSettings, create_provider
@@ -55,6 +56,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=int(os.getenv("OLLAMA_PORT", "11434")),
         help="Port for the local Ollama server.",
     )
+    verbose_group = digest_parser.add_mutually_exclusive_group()
+    verbose_group.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Print truncated LLM request and response diagnostics.",
+    )
+    verbose_group.add_argument(
+        "--vv",
+        action="store_true",
+        help="Print full LLM request and response diagnostics without omitting the middle.",
+    )
+    digest_parser.add_argument(
+        "--log-location",
+        default="stdio",
+        metavar="stdio|file_path",
+        help="Write progress and verbose logs to stdio or to the specified file path.",
+    )
     digest_parser.add_argument(
         "--timeout-sc",
         type=int,
@@ -98,6 +117,34 @@ def _read_api_key_file(path_value: str) -> str:
     return api_key
 
 
+def _resolve_verbose_level(args: argparse.Namespace) -> int:
+    if args.vv:
+        return 2
+    if args.verbose:
+        return 1
+    return 0
+
+
+def _build_reporter(args: argparse.Namespace) -> Tuple[ConsoleProgressReporter, Optional[TextIO]]:
+    verbose_level = _resolve_verbose_level(args)
+    if args.log_location == "stdio":
+        return ConsoleProgressReporter(verbose_level=verbose_level), None
+    log_path = Path(args.log_location).expanduser()
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        stream = log_path.open("w", encoding="utf-8")
+    except OSError as error:
+        raise ValueError("Unable to open log file {path}: {error}".format(path=log_path, error=error)) from error
+    return (
+        ConsoleProgressReporter(
+            stream=stream,
+            verbose_level=verbose_level,
+            rewrite_updates=False,
+        ),
+        stream,
+    )
+
+
 def _resolve_api_key(args: argparse.Namespace) -> str:
     if args.provider_kind in {"ollama", "mock-llm"}:
         return ""
@@ -120,7 +167,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command != "digest":
         parser.error("Unknown command.")
 
-    reporter = ConsoleProgressReporter()
+    log_stream = None
+    try:
+        reporter, log_stream = _build_reporter(args)
+    except ValueError as error:
+        ConsoleProgressReporter().persist("Error: {message}".format(message=error))
+        return 1
     try:
         reporter.persist(_provider_message(args))
         provider = create_provider(
@@ -135,6 +187,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 timeout_seconds=args.timeout_sc,
             )
         )
+        provider.set_progress_reporter(reporter)
         provider.validate_configuration()
         digester = DocumentDigester(
             provider=provider,
@@ -161,3 +214,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         reporter.clear()
         reporter.persist("Error: {message}".format(message=error))
         return 1
+    finally:
+        if log_stream is not None:
+            log_stream.close()

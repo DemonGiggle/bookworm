@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from time import perf_counter
 from typing import Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -42,6 +43,7 @@ class OllamaProvider(LLMProvider):
         port: int = 11434,
         timeout_seconds: Optional[int] = None,
     ) -> None:
+        super().__init__()
         self.model = model
         self.host = host
         self.port = port
@@ -49,6 +51,7 @@ class OllamaProvider(LLMProvider):
         self.base_url = _normalize_base_url(host=host, port=port)
 
     def _complete_json(self, system_prompt: str, user_prompt: str) -> Dict[str, object]:
+        self._log_request("Ollama", self.model, system_prompt, user_prompt)
         payload = json.dumps(
             {
                 "model": self.model,
@@ -66,6 +69,7 @@ class OllamaProvider(LLMProvider):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        started_at = perf_counter()
         try:
             if self.timeout_seconds is None:
                 response_context = urlopen(request)
@@ -89,14 +93,20 @@ class OllamaProvider(LLMProvider):
                 )
             )
 
-        response_payload = json.loads(body)
+        response_payload = self._parse_json_response(
+            "Ollama",
+            self.model,
+            body,
+            payload_label="HTTP response body",
+        )
         message = response_payload.get("message", {})
         if not isinstance(message, dict):
             raise ValueError("Ollama response did not contain a valid message payload.")
         content = str(message.get("content", "")).strip()
         if not content:
             raise ValueError("Ollama returned an empty response.")
-        return json.loads(content)
+        self._log_response("Ollama", self.model, content, perf_counter() - started_at)
+        return self._parse_json_response("Ollama", self.model, content)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         payload = self._complete_json(
