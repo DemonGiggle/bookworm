@@ -48,11 +48,27 @@ class DocumentDigester:
                 )
             )
 
+        def write_in_progress_topics(topics):
+            self.progress_reporter.persist(
+                "Persisting {count} in-progress topic digest(s).".format(count=len(topics))
+            )
+            artifact_paths.update(
+                self.artifact_writer.write_topics(
+                    topics,
+                    output_path,
+                    progress_reporter=self.progress_reporter,
+                )
+            )
+
         result = DigestOrchestrator(
             provider=self.provider,
             config=self.config,
             progress_reporter=self.progress_reporter,
-        ).run(documents, on_topics_finalized=write_completed_topics)
+        ).run(
+            documents,
+            on_topics_finalized=write_completed_topics,
+            on_topics_updated=write_in_progress_topics,
+        )
         result.artifact_paths = artifact_paths
         self.progress_reporter.persist(
             "Finished digestion with {count} skill file(s).".format(count=len(result.topics))

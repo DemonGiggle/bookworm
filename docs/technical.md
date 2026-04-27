@@ -254,9 +254,10 @@ The orchestrator lives in `src/digester/core/orchestrator.py`.
 3. For each batch:
    - pass the currently active topics and new chunks to the provider
    - merge returned topic updates into the in-memory topic map
+   - rewrite the current in-progress skill files so partial output survives interruptions
    - treat `should_continue` as guidance about whether the visible topics likely continue into nearby chunks
 4. When the provider marks the visible topic cluster complete, finalize that cluster for export and clear it from the active in-memory map
-5. Write completed topic files incrementally
+5. Rewrite finalized topic files incrementally as clusters close
 6. Finalize any remaining active topics after the last batch
 7. Return a `DigestResult`
 
@@ -268,6 +269,7 @@ The loop ends when any of the following happens:
 - `max_batches` is reached
 
 Provider completion does not stop corpus traversal on its own. It only marks the current topic cluster as sufficiently covered.
+If a provider error occurs after in-memory topics already exist, the orchestrator writes the latest in-progress topic files before re-raising the error.
 
 ### 7.3 Why the Loop Is "Adaptive"
 
