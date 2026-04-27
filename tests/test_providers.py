@@ -301,6 +301,47 @@ def test_ollama_provider_verbose_logging_reports_request_and_response(monkeypatc
     assert any("response preview" in message for message in verbose_messages)
 
 
+def test_ollama_provider_retries_once_after_invalid_model_json(monkeypatch) -> None:
+    provider = OllamaProvider(model="llama3.1")
+    responses = iter(
+        [
+            '{"topic_updates": [], "should_continue": false',
+            json.dumps(
+                {
+                    "topic_updates": [],
+                    "should_continue": False,
+                    "rationale": "Done.",
+                }
+            ),
+        ]
+    )
+
+    class FakeResponse:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"message": {"content": self.content}}).encode("utf-8")
+
+    def fake_urlopen(request):
+        return FakeResponse(next(responses))
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", fake_urlopen)
+
+    payload = provider._complete_json(
+        system_prompt="system prompt",
+        user_prompt="user prompt",
+    )
+
+    assert payload["rationale"] == "Done."
+
+
 def test_openai_provider_verbose_logging_reports_request_and_response(monkeypatch) -> None:
     provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
     reporter = RecordingVerboseReporter()
@@ -410,6 +451,9 @@ def test_ollama_provider_reports_invalid_model_json_with_context(monkeypatch) ->
     invalid_content = '{"topic_updates": [], "should_continue": false "rationale": "broken"}'
 
     class FakeResponse:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
         def __enter__(self):
             return self
 
@@ -417,9 +461,14 @@ def test_ollama_provider_reports_invalid_model_json_with_context(monkeypatch) ->
             return False
 
         def read(self) -> bytes:
-            return json.dumps({"message": {"content": invalid_content}}).encode("utf-8")
+            return json.dumps({"message": {"content": self.content}}).encode("utf-8")
 
-    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", lambda request: FakeResponse())
+    responses = iter([invalid_content, invalid_content])
+
+    monkeypatch.setattr(
+        "digester.providers.ollama_provider.urlopen",
+        lambda request: FakeResponse(next(responses)),
+    )
 
     with pytest.raises(ValueError) as exc_info:
         provider.digest_batch(
@@ -468,6 +517,46 @@ def test_ollama_provider_reports_invalid_http_body_with_context(monkeypatch) -> 
     message = str(exc_info.value)
     assert "Ollama model llama3.1 returned invalid JSON in the HTTP response body" in message
     assert "Expecting ',' delimiter" in message
+    assert "Try a smaller batch or a model with stronger JSON adherence." not in message
+
+
+def test_ollama_provider_reports_truncated_model_json_with_guidance(monkeypatch) -> None:
+    provider = OllamaProvider(model="llama3.1")
+    invalid_content = '{"topic_updates": [], "should_continue": false, "rationale": "cut off"'
+
+    class FakeResponse:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"message": {"content": self.content}}).encode("utf-8")
+
+    responses = iter([invalid_content, invalid_content])
+    monkeypatch.setattr(
+        "digester.providers.ollama_provider.urlopen",
+        lambda request: FakeResponse(next(responses)),
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        provider.digest_batch(
+            DigestBatchRequest(
+                config=DigestConfig(),
+                batch_number=1,
+                total_batches=1,
+                chunk_batch=[],
+                current_topics=[],
+            )
+        )
+
+    message = str(exc_info.value)
+    assert "Ollama model llama3.1 returned invalid JSON in the model response" in message
+    assert "The model response appears truncated before the JSON finished." in message
     assert '<<<HERE>>><EOF><<<HERE>>>' in message
 
 

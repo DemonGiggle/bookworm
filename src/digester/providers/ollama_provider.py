@@ -50,13 +50,14 @@ class OllamaProvider(LLMProvider):
         self.timeout_seconds = timeout_seconds
         self.base_url = _normalize_base_url(host=host, port=port)
 
-    def _complete_json(self, system_prompt: str, user_prompt: str) -> Dict[str, object]:
+    def _request_content(self, system_prompt: str, user_prompt: str) -> str:
         self._log_request("Ollama", self.model, system_prompt, user_prompt)
         payload = json.dumps(
             {
                 "model": self.model,
                 "stream": False,
                 "format": "json",
+                "options": {"temperature": 0},
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -106,7 +107,24 @@ class OllamaProvider(LLMProvider):
         if not content:
             raise ValueError("Ollama returned an empty response.")
         self._log_response("Ollama", self.model, content, perf_counter() - started_at)
-        return self._parse_json_response("Ollama", self.model, content)
+        return content
+
+    def _complete_json(self, system_prompt: str, user_prompt: str) -> Dict[str, object]:
+        content = self._request_content(system_prompt=system_prompt, user_prompt=user_prompt)
+        try:
+            return self._parse_json_response("Ollama", self.model, content)
+        except ValueError as error:
+            if "invalid JSON in the model response" not in str(error):
+                raise
+        self.progress_reporter.verbose(
+            "Verbose: Ollama returned malformed JSON; retrying once with a stricter JSON-only instruction."
+        )
+        retry_system_prompt = (
+            "{prompt} Return only one complete JSON object with no markdown fences, no commentary, "
+            "and no trailing text. Ensure every key, string, bracket, and brace is fully closed."
+        ).format(prompt=system_prompt)
+        retry_content = self._request_content(system_prompt=retry_system_prompt, user_prompt=user_prompt)
+        return self._parse_json_response("Ollama", self.model, retry_content)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         payload = self._complete_json(

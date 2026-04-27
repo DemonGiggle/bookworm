@@ -74,6 +74,7 @@ If `--ollama-port` is omitted, the CLI defaults to port `11434`.
 Use `--verbose` or `-v` to print truncated LLM request and response previews, total character counts, and round-trip timing for each model call.
 Use `--vv` to log the full escaped request and response bodies without omitting the middle.
 Use `--log-location stdio|/path/to/bookworm.log` to keep logs on stdio or write them to a file. The default is `stdio`.
+If an Ollama model returns malformed JSON, Bookworm retries once with a stricter JSON-only instruction. If it still fails, reduce `--batch-size`, `--max-chunk-chars`, or `--max-active-topics`, or choose a model with better structured-output reliability.
 
 ## MockLLM example
 

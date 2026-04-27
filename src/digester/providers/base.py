@@ -74,6 +74,20 @@ def _json_error_excerpt(text: str, position: int, radius: int = 80) -> str:
     )
 
 
+def _json_error_guidance(payload_label: str, position: int, text_length: int) -> str:
+    if payload_label != "model response":
+        return ""
+    if position >= text_length:
+        return (
+            " The model response appears truncated before the JSON finished. "
+            "Try a smaller batch or a model with stronger JSON adherence."
+        )
+    return (
+        " The model likely added non-JSON text or broke JSON formatting. "
+        "Try a smaller batch or a model with stronger JSON adherence."
+    )
+
+
 class LLMProvider(ABC):
     def __init__(self, progress_reporter: Optional[ProgressReporter] = None) -> None:
         self.progress_reporter = progress_reporter or NoOpProgressReporter()
@@ -153,7 +167,7 @@ class LLMProvider(ABC):
         except json.JSONDecodeError as error:
             raise ValueError(
                 "{provider} model {model} returned invalid JSON in the {payload}: {detail}. "
-                "Received {count} chars. Around char {position}: \"{excerpt}\"".format(
+                "Received {count} chars. Around char {position}: \"{excerpt}\"{guidance}".format(
                     provider=provider_name,
                     model=model,
                     payload=payload_label,
@@ -161,6 +175,7 @@ class LLMProvider(ABC):
                     count=len(response_text),
                     position=error.pos,
                     excerpt=_json_error_excerpt(response_text, error.pos),
+                    guidance=_json_error_guidance(payload_label, error.pos, len(response_text)),
                 )
             ) from error
 
