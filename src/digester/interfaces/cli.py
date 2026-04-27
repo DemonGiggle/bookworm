@@ -56,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Port for the local Ollama server.",
     )
     digest_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Print verbose LLM request and response diagnostics.",
+    )
+    digest_parser.add_argument(
         "--timeout-sc",
         type=int,
         default=None,
@@ -120,7 +126,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command != "digest":
         parser.error("Unknown command.")
 
-    reporter = ConsoleProgressReporter()
+    reporter = ConsoleProgressReporter(verbose=args.verbose)
     try:
         reporter.persist(_provider_message(args))
         provider = create_provider(
@@ -135,6 +141,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 timeout_seconds=args.timeout_sc,
             )
         )
+        provider.set_progress_reporter(reporter)
         provider.validate_configuration()
         digester = DocumentDigester(
             provider=provider,

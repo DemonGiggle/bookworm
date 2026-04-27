@@ -16,6 +16,9 @@ class ProgressReporter:
     def persist(self, message: str) -> None:
         raise NotImplementedError
 
+    def verbose(self, message: str) -> None:
+        raise NotImplementedError
+
     def clear(self) -> None:
         raise NotImplementedError
 
@@ -27,13 +30,17 @@ class NoOpProgressReporter(ProgressReporter):
     def persist(self, message: str) -> None:
         return None
 
+    def verbose(self, message: str) -> None:
+        return None
+
     def clear(self) -> None:
         return None
 
 
 class ConsoleProgressReporter(ProgressReporter):
-    def __init__(self, stream: Optional[TextIO] = None) -> None:
+    def __init__(self, stream: Optional[TextIO] = None, verbose: bool = False) -> None:
         self.stream = stream or sys.stderr
+        self.verbose_enabled = verbose
         self._last_line_length = 0
 
     def _clear_line(self) -> None:
@@ -54,6 +61,11 @@ class ConsoleProgressReporter(ProgressReporter):
         self._clear_line()
         self.stream.write(message.strip() + "\n")
         self.stream.flush()
+
+    def verbose(self, message: str) -> None:
+        if not self.verbose_enabled:
+            return None
+        self.persist(message)
 
     def clear(self) -> None:
         self._clear_line()

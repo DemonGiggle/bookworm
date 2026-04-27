@@ -27,6 +27,7 @@ def _titleize(value: str) -> str:
 
 class MockLLMProvider(LLMProvider):
     def __init__(self, model: str) -> None:
+        super().__init__()
         self.model = model
         self._topic_slugs_by_source: Dict[Tuple[str, str], str] = {}
         self._used_topic_slugs: Set[str] = set()

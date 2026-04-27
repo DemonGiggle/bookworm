@@ -4,6 +4,7 @@ from digester.core.models import DigestBatchRequest, DigestDecision, TopicDigest
 from digester.interfaces import cli
 from digester.providers import ProviderSettings
 from digester.providers.base import LLMProvider
+from digester.utils.progress import ConsoleProgressReporter
 
 
 class CliFakeProvider(LLMProvider):
@@ -285,6 +286,52 @@ def test_cli_ollama_timeout_defaults_to_none(monkeypatch, tmp_path: Path, capsys
     capsys.readouterr()
     assert exit_code == 0
     assert seen["timeout_seconds"] is None
+
+
+def test_cli_passes_verbose_reporter_to_provider(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    provider = CliFakeProvider()
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(cli, "create_provider", lambda settings: provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "--verbose",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert isinstance(provider.progress_reporter, ConsoleProgressReporter)
+    assert provider.progress_reporter.verbose_enabled is True
+
+
+def test_cli_short_verbose_flag_is_supported() -> None:
+    args = cli.build_parser().parse_args(
+        [
+            "digest",
+            "notes.txt",
+            "--output-dir",
+            "artifacts",
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "-v",
+        ]
+    )
+
+    assert args.verbose is True
 
 
 def test_cli_mock_llm_runs_without_api_key(tmp_path: Path, monkeypatch, capsys) -> None:

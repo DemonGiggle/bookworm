@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from time import perf_counter
 from typing import Dict, List, Optional
 
 from ..core.models import DigestBatchRequest, DigestDecision, TopicDigest
@@ -22,6 +23,7 @@ class OpenAIProvider(LLMProvider):
         base_url: Optional[str] = None,
         organization: Optional[str] = None,
     ) -> None:
+        super().__init__()
         if not api_key:
             raise ValueError("An API key is required for hosted or compatible OpenAI clients.")
         self.model = model
@@ -112,6 +114,8 @@ class OpenAIProvider(LLMProvider):
 
     def _complete_json(self, system_prompt: str, user_prompt: str) -> Dict[str, object]:
         client = self._client()
+        self._log_request("OpenAI", self.model, system_prompt, user_prompt)
+        started_at = perf_counter()
         try:
             response = client.chat.completions.create(
                 model=self.model,
@@ -126,6 +130,7 @@ class OpenAIProvider(LLMProvider):
         content = response.choices[0].message.content
         if not content:
             raise ValueError("Model returned an empty response.")
+        self._log_response("OpenAI", self.model, content, perf_counter() - started_at)
         return json.loads(content)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
