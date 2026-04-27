@@ -335,6 +335,104 @@ def test_openai_provider_verbose_logging_reports_request_and_response(monkeypatc
     assert any("response preview" in message for message in verbose_messages)
 
 
+def test_openai_provider_reports_invalid_json_with_context(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    invalid_content = '{"topic_updates": [], "should_continue": false "rationale": "broken"}'
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=lambda **kwargs: SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=invalid_content))]
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+
+    with pytest.raises(ValueError) as exc_info:
+        provider.digest_batch(
+            DigestBatchRequest(
+                config=DigestConfig(),
+                batch_number=1,
+                total_batches=1,
+                chunk_batch=[],
+                current_topics=[],
+            )
+        )
+
+    message = str(exc_info.value)
+    assert "OpenAI model gpt-5-nano returned invalid JSON in the model response" in message
+    assert "Expecting ',' delimiter" in message
+    assert "Received 69 chars." in message
+    assert '<<<HERE>>>"<<<HERE>>>rationale' in message
+
+
+def test_ollama_provider_reports_invalid_model_json_with_context(monkeypatch) -> None:
+    provider = OllamaProvider(model="llama3.1")
+    invalid_content = '{"topic_updates": [], "should_continue": false "rationale": "broken"}'
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"message": {"content": invalid_content}}).encode("utf-8")
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", lambda request: FakeResponse())
+
+    with pytest.raises(ValueError) as exc_info:
+        provider.digest_batch(
+            DigestBatchRequest(
+                config=DigestConfig(),
+                batch_number=1,
+                total_batches=1,
+                chunk_batch=[],
+                current_topics=[],
+            )
+        )
+
+    message = str(exc_info.value)
+    assert "Ollama model llama3.1 returned invalid JSON in the model response" in message
+    assert "Expecting ',' delimiter" in message
+    assert "Received 69 chars." in message
+    assert '<<<HERE>>>"<<<HERE>>>rationale' in message
+
+
+def test_ollama_provider_reports_invalid_http_body_with_context(monkeypatch) -> None:
+    provider = OllamaProvider(model="llama3.1")
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b'{"message": {"content": "oops"}'
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", lambda request: FakeResponse())
+
+    with pytest.raises(ValueError) as exc_info:
+        provider.digest_batch(
+            DigestBatchRequest(
+                config=DigestConfig(),
+                batch_number=1,
+                total_batches=1,
+                chunk_batch=[],
+                current_topics=[],
+            )
+        )
+
+    message = str(exc_info.value)
+    assert "Ollama model llama3.1 returned invalid JSON in the HTTP response body" in message
+    assert "Expecting ',' delimiter" in message
+    assert '<<<HERE>>><EOF><<<HERE>>>' in message
+
+
 def test_openai_provider_validate_configuration_reports_model_access(monkeypatch) -> None:
     provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
     request = httpx.Request("GET", "https://api.openai.com/v1/models/gpt-5-nano")

@@ -93,7 +93,12 @@ class OllamaProvider(LLMProvider):
                 )
             )
 
-        response_payload = json.loads(body)
+        response_payload = self._parse_json_response(
+            "Ollama",
+            self.model,
+            body,
+            payload_label="HTTP response body",
+        )
         message = response_payload.get("message", {})
         if not isinstance(message, dict):
             raise ValueError("Ollama response did not contain a valid message payload.")
@@ -101,7 +106,7 @@ class OllamaProvider(LLMProvider):
         if not content:
             raise ValueError("Ollama returned an empty response.")
         self._log_response("Ollama", self.model, content, perf_counter() - started_at)
-        return json.loads(content)
+        return self._parse_json_response("Ollama", self.model, content)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         payload = self._complete_json(

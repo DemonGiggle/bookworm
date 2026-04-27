@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from typing import List, Optional
 
@@ -35,6 +36,37 @@ def _escaped_preview(text: str, head_chars: int = 160, tail_chars: int = 80) -> 
         head=head,
         omitted=omitted,
         tail=tail,
+    )
+
+
+def _escaped_fragment(text: str) -> str:
+    return (
+        text.replace("\\", "\\\\")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
+
+
+def _json_error_excerpt(text: str, position: int, radius: int = 80) -> str:
+    start = max(position - radius, 0)
+    end = min(position + radius, len(text))
+    before = _escaped_fragment(text[start:position])
+    current = text[position : position + 1]
+    after = _escaped_fragment(text[position + 1 : end])
+    marker = "<EOF>" if not current else _escaped_fragment(current)
+    prefix = ""
+    suffix = ""
+    if start > 0:
+        prefix = "...[{count} chars omitted]...".format(count=start)
+    if end < len(text):
+        suffix = "...[{count} chars omitted]...".format(count=len(text) - end)
+    return '{prefix}{before}<<<HERE>>>{marker}<<<HERE>>>{after}{suffix}'.format(
+        prefix=prefix,
+        before=before,
+        marker=marker,
+        after=after,
+        suffix=suffix,
     )
 
 
@@ -86,6 +118,29 @@ class LLMProvider(ABC):
                 preview=_escaped_preview(response_text),
             )
         )
+
+    def _parse_json_response(
+        self,
+        provider_name: str,
+        model: str,
+        response_text: str,
+        payload_label: str = "model response",
+    ) -> object:
+        try:
+            return json.loads(response_text)
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                "{provider} model {model} returned invalid JSON in the {payload}: {detail}. "
+                "Received {count} chars. Around char {position}: \"{excerpt}\"".format(
+                    provider=provider_name,
+                    model=model,
+                    payload=payload_label,
+                    detail=error,
+                    count=len(response_text),
+                    position=error.pos,
+                    excerpt=_json_error_excerpt(response_text, error.pos),
+                )
+            ) from error
 
     def validate_configuration(self) -> None:
         return None

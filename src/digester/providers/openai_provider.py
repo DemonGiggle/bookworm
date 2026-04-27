@@ -131,7 +131,7 @@ class OpenAIProvider(LLMProvider):
         if not content:
             raise ValueError("Model returned an empty response.")
         self._log_response("OpenAI", self.model, content, perf_counter() - started_at)
-        return json.loads(content)
+        return self._parse_json_response("OpenAI", self.model, content)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         payload = self._complete_json(
