@@ -364,7 +364,6 @@ def test_document_digester_keeps_in_progress_files_when_finalize_fails(tmp_path:
     assert any("Persisting 1 in-progress topic digest(s) after an error." == message for message in persisted)
 
 
-<<<<<<< HEAD
 class ReopenedTopicProvider(LLMProvider):
     def __init__(self) -> None:
         self.finalize_calls: List[List[str]] = []
