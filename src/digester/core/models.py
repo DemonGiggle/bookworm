@@ -47,6 +47,19 @@ def _word_count(text: str) -> int:
     return len(text.split())
 
 
+def coerce_text_list(raw_value: object) -> List[str]:
+    if isinstance(raw_value, str):
+        text = raw_value.strip()
+        return [text] if text else []
+    if not isinstance(raw_value, list):
+        return []
+    items = [str(item).strip() for item in raw_value if str(item).strip()]
+    if items and all(len(item) == 1 for item in items):
+        joined = "".join(items).strip()
+        return [joined] if joined else []
+    return items
+
+
 @dataclass(frozen=True)
 class SourceRef:
     source_id: str
@@ -196,8 +209,6 @@ class DigestDecision:
                             )
                 if not parsed_refs:
                     parsed_refs = list(fallback_refs)
-                key_points = raw_topic.get("key_points", [])
-                workflow_notes = raw_topic.get("workflow_notes", [])
                 topic_updates.append(
                     TopicDigest(
                         slug=str(raw_topic.get("slug", "")).strip(),
@@ -206,10 +217,8 @@ class DigestDecision:
                             raw_topic.get("routing_description") or raw_topic.get("when_to_use") or ""
                         ).strip(),
                         summary=str(raw_topic.get("summary", "")).strip(),
-                        key_points=[str(point).strip() for point in key_points or [] if str(point).strip()],
-                        workflow_notes=[
-                            str(note).strip() for note in workflow_notes or [] if str(note).strip()
-                        ],
+                        key_points=coerce_text_list(raw_topic.get("key_points", [])),
+                        workflow_notes=coerce_text_list(raw_topic.get("workflow_notes", [])),
                         references=parsed_refs,
                     )
                 )

@@ -10,6 +10,7 @@ from digester.core.models import (
     ContentChunk,
     DigestBatchRequest,
     DigestConfig,
+    DigestDecision,
     SourceRef,
     TopicDigest,
 )
@@ -298,6 +299,65 @@ def test_parse_finalized_topics_preserves_structured_skill_fields() -> None:
     assert parsed[0].routing_description == "Use this skill when reviewing the finalized overview guidance."
     assert parsed[0].workflow_notes == [
         "Validate the cited source before applying the summarized workflow."
+    ]
+
+
+def test_parse_finalized_topics_coerces_text_fields_without_character_splitting() -> None:
+    parsed = parse_finalized_topics(
+        {
+            "topics": [
+                {
+                    "slug": "overview",
+                    "title": "Overview",
+                    "routing_description": "Use this skill when reviewing finalized guidance.",
+                    "summary": "Condenses the finalized source.",
+                    "key_points": "Check the generated guidance before editing.",
+                    "workflow_notes": ["h", "e", "l", "l", "o"],
+                    "references": [
+                        {
+                            "source_id": "source",
+                            "source_path": "/tmp/source.txt",
+                            "locator": "full-document",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+
+    assert parsed[0].key_points == ["Check the generated guidance before editing."]
+    assert parsed[0].workflow_notes == ["hello"]
+
+
+def test_digest_decision_coerces_text_fields_without_character_splitting() -> None:
+    decision = DigestDecision.from_payload(
+        {
+            "topic_updates": [
+                {
+                    "slug": "overview",
+                    "title": "Overview",
+                    "routing_description": "Use this skill when reviewing batch guidance.",
+                    "summary": "Condenses the batch source.",
+                    "key_points": ["c", "h", "e", "c", "k"],
+                    "workflow_notes": "Validate the generated guidance before editing.",
+                    "references": [],
+                }
+            ],
+            "should_continue": False,
+            "rationale": "Done.",
+        },
+        fallback_refs=[
+            SourceRef(
+                source_id="source",
+                source_path="/tmp/source.txt",
+                locator="full-document",
+            )
+        ],
+    )
+
+    assert decision.topic_updates[0].key_points == ["check"]
+    assert decision.topic_updates[0].workflow_notes == [
+        "Validate the generated guidance before editing."
     ]
 
 

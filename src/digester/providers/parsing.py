@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Sequence
 
-from ..core.models import DigestDecision, SourceRef, TopicDigest
+from ..core.models import DigestDecision, SourceRef, TopicDigest, coerce_text_list
 
 
 def parse_digest_decision(
@@ -55,10 +55,8 @@ def parse_finalized_topics(
                     raw_topic.get("routing_description") or raw_topic.get("when_to_use") or ""
                 ).strip(),
                 summary=str(raw_topic.get("summary", "")).strip(),
-                key_points=[str(point).strip() for point in raw_topic.get("key_points", []) if str(point).strip()],
-                workflow_notes=[
-                    str(note).strip() for note in raw_topic.get("workflow_notes", []) if str(note).strip()
-                ],
+                key_points=coerce_text_list(raw_topic.get("key_points", [])),
+                workflow_notes=coerce_text_list(raw_topic.get("workflow_notes", [])),
                 references=refs,
             )
         )
