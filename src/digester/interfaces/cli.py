@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Optional, Sequence, TextIO, Tuple
 
@@ -161,6 +162,39 @@ def _resolve_api_key(args: argparse.Namespace) -> str:
     return api_key
 
 
+def _batch_sizes(chunk_count: int, batch_size: int) -> Sequence[int]:
+    return [
+        len(range(start, min(start + batch_size, chunk_count)))
+        for start in range(0, chunk_count, batch_size)
+    ]
+
+
+def _status_report(
+    *,
+    chunk_count: int,
+    batch_size: int,
+    total_chars: int,
+    batch_count: int,
+    batch_sizes: Sequence[int],
+    elapsed_seconds: float,
+    skills_generated: int,
+) -> str:
+    return "\n".join(
+        [
+            "Digest status report:",
+            "- Chunks: {count}".format(count=chunk_count),
+            "- Configured batch size: {count}".format(count=batch_size),
+            "- Batch sizes: {sizes}".format(
+                sizes=", ".join(str(size) for size in batch_sizes) or "0"
+            ),
+            "- Total chars: {count}".format(count=total_chars),
+            "- Batches: {count}".format(count=batch_count),
+            "- Elapsed: {elapsed:.2f}s".format(elapsed=elapsed_seconds),
+            "- Skills generated: {count}".format(count=skills_generated),
+        ]
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -200,13 +234,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             ),
             progress_reporter=reporter,
         )
+        started_at = time.perf_counter()
         result = digester.digest_paths(args.inputs, args.output_dir)
+        elapsed_seconds = time.perf_counter() - started_at
+        chunk_count = len(result.chunks)
+        batch_sizes = list(_batch_sizes(chunk_count, args.batch_size))
+        total_chars = sum(len(chunk.text) for chunk in result.chunks)
         agent_targets = len([key for key in result.artifact_paths if ":" not in key])
         print(
             "Wrote {count} skill(s) for {agents} agent target(s) to {output_dir}".format(
                 count=len(result.topics),
                 agents=agent_targets,
                 output_dir=args.output_dir,
+            )
+        )
+        print(
+            _status_report(
+                chunk_count=chunk_count,
+                batch_size=args.batch_size,
+                total_chars=total_chars,
+                batch_count=len(batch_sizes),
+                batch_sizes=batch_sizes,
+                elapsed_seconds=elapsed_seconds,
+                skills_generated=len(result.topics),
             )
         )
         return 0

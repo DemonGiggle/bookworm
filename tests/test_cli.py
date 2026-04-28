@@ -56,6 +56,14 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "Wrote 1 skill(s) for 3 agent target(s)" in captured.out
+    assert "Digest status report:" in captured.out
+    assert "- Chunks: 1" in captured.out
+    assert "- Configured batch size: 2" in captured.out
+    assert "- Batch sizes: 1" in captured.out
+    assert "- Total chars: 19" in captured.out
+    assert "- Batches: 1" in captured.out
+    assert "- Elapsed: " in captured.out
+    assert "- Skills generated: 1" in captured.out
     assert (output_dir / "copilot" / ".github" / "skills" / "summary" / "SKILL.md").exists()
     assert (output_dir / "opencode" / ".opencode" / "skills" / "summary" / "SKILL.md").exists()
     assert (output_dir / "codex" / ".agents" / "skills" / "summary" / "SKILL.md").exists()
@@ -499,3 +507,39 @@ def test_cli_max_topics_flag_is_kept_as_compatibility_alias() -> None:
     )
 
     assert args.max_active_topics == 7
+
+
+def test_cli_status_report_lists_multiple_batch_sizes(tmp_path: Path, monkeypatch, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text(
+        "One.\n\nTwo.\n\nThree.",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "artifacts"
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "--batch-size",
+            "2",
+            "--max-chunk-chars",
+            "8",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "- Chunks: 3" in captured.out
+    assert "- Configured batch size: 2" in captured.out
+    assert "- Batch sizes: 2, 1" in captured.out
+    assert "- Total chars: 14" in captured.out
+    assert "- Batches: 2" in captured.out
+    assert "- Skills generated: 1" in captured.out
