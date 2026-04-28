@@ -324,3 +324,65 @@ def test_document_digester_keeps_in_progress_files_when_finalize_fails(tmp_path:
     persisted = [message for kind, message in reporter.messages if kind == "persist"]
     assert any("Persisting 1 in-progress topic digest(s)." == message for message in persisted)
     assert any("Persisting 1 in-progress topic digest(s) after an error." == message for message in persisted)
+
+
+class ReopenedTopicProvider(LLMProvider):
+    def __init__(self) -> None:
+        self.finalize_calls: List[List[str]] = []
+
+    def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
+        chunk = request.chunk_batch[0]
+        if request.batch_number == 2:
+            return DigestDecision(
+                topic_updates=[
+                    TopicDigest(
+                        slug="testing",
+                        title="Testing",
+                        summary="Captures validation flow.",
+                        key_points=["Run the checks after each change."],
+                        references=[chunk.source_ref],
+                    )
+                ],
+                should_continue=False,
+                rationale="The testing topic is complete for this chunk.",
+            )
+        return DigestDecision(
+            topic_updates=[
+                TopicDigest(
+                    slug="architecture",
+                    title="Architecture",
+                    summary="Architecture notes from batch {batch}.".format(batch=request.batch_number),
+                    key_points=["Architecture point {batch}".format(batch=request.batch_number)],
+                    references=[chunk.source_ref],
+                )
+            ],
+            should_continue=False,
+            rationale="The visible topic cluster is complete.",
+        )
+
+    def finalize_topics(self, topics: List[TopicDigest]) -> List[TopicDigest]:
+        self.finalize_calls.append([topic.slug for topic in topics])
+        return topics
+
+
+def test_document_digester_merges_reopened_topics_across_finalized_clusters(tmp_path: Path) -> None:
+    first_path = tmp_path / "architecture-a.txt"
+    second_path = tmp_path / "testing.txt"
+    third_path = tmp_path / "architecture-b.txt"
+    first_path.write_text("Architecture introduction.", encoding="utf-8")
+    second_path.write_text("Testing workflow.", encoding="utf-8")
+    third_path.write_text("Architecture follow-up.", encoding="utf-8")
+
+    provider = ReopenedTopicProvider()
+    result = DocumentDigester(
+        provider=provider,
+        config=DigestConfig(max_chunk_chars=30, batch_size=1, minimum_batches_before_stop=1),
+    ).digest_paths([first_path, second_path, third_path], tmp_path / "out")
+
+    assert provider.finalize_calls == [["architecture"], ["testing"], ["architecture"]]
+    assert [topic.slug for topic in result.topics] == ["architecture", "testing"]
+    architecture = result.topics[0]
+    assert "Architecture notes from batch 1." in architecture.summary
+    assert "Architecture notes from batch 3." in architecture.summary
+    assert architecture.key_points == ["Architecture point 1", "Architecture point 3"]
+    assert len(architecture.references) == 2

@@ -70,9 +70,13 @@ class DigestOrchestrator:
             if reason:
                 self.progress_reporter.persist(reason)
             for topic in topics:
-                if topic.slug not in finalized_topics:
+                existing_finalized = finalized_topics.get(topic.slug)
+                if existing_finalized is None:
                     finalized_topic_order.append(topic.slug)
-                finalized_topics[topic.slug] = topic
+                    finalized_topics[topic.slug] = topic
+                    continue
+                existing_finalized.merge(topic)
+                existing_finalized.summary = collapse_topic_summary(existing_finalized.summary)
             if on_topics_finalized is not None:
                 on_topics_finalized(topics)
             topic_map.clear()

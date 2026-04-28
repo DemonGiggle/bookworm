@@ -287,6 +287,7 @@ This allows the provider to accumulate understanding and decide whether visible 
 Topic updates from the provider are merged by `slug`. This makes provider output idempotent enough to support iterative digestion:
 
 - the same logical topic can be enriched across batches
+- reopened slugs from later finalized clusters are merged back into the existing finalized topic
 - duplicate bullets and references are removed
 - summaries are collapsed to reduce line-level repetition
 
