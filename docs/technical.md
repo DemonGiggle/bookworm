@@ -319,6 +319,7 @@ The finalization step asks the model to:
 - refine and compress existing topic digests
 - preserve factual key points
 - return a JSON object with a `topics` list suitable for reusable skill files
+- satisfy export-quality requirements for routing guidance, workflow detail, and references
 
 ### 8.3 Output Schema Expectations
 
@@ -525,6 +526,8 @@ Current error behavior is intentionally explicit:
 
 - unsupported source types raise `ValueError`
 - empty extractable content raises `ValueError`
+- malformed finalized topic payloads raise `ValueError` instead of silently falling back to weaker topic data
+- finalized topics that fail routing/workflow/reference quality checks raise `ValueError` before export
 - empty model response raises `ValueError`
 - missing provider credentials raise `ValueError`
 

@@ -12,10 +12,10 @@ def parse_digest_decision(
     return DigestDecision.from_payload(payload, fallback_refs=fallback_refs)
 
 
-def parse_finalized_topics(payload: Dict[str, object], fallback_topics: List[TopicDigest]) -> List[TopicDigest]:
-    finalized = payload.get("topics", [])
+def parse_finalized_topics(payload: Dict[str, object]) -> List[TopicDigest]:
+    finalized = payload.get("topics")
     if not isinstance(finalized, list):
-        return fallback_topics
+        raise ValueError("Finalized topic payload must contain a topics list.")
 
     result: List[TopicDigest] = []
     for raw_topic in finalized:
@@ -46,4 +46,6 @@ def parse_finalized_topics(payload: Dict[str, object], fallback_topics: List[Top
             )
         )
     parsed_topics = [topic for topic in result if topic.slug and topic.title]
-    return parsed_topics or fallback_topics
+    if not parsed_topics:
+        raise ValueError("Finalized topic payload contained no valid topics.")
+    return parsed_topics
