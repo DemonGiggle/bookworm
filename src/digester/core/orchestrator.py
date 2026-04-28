@@ -62,7 +62,8 @@ class DigestOrchestrator:
         def flush_topic_cluster(reason: Optional[str] = None) -> None:
             if not topic_map:
                 return
-            topics = validate_topics_for_export(self.provider.finalize_topics(list(topic_map.values())))
+            finalized = self.provider.finalize_topics(list(topic_map.values()))
+            topics = validate_topics_for_export(finalized)
             if not topics:
                 raise ValueError("The provider returned no topics for the supplied corpus.")
             self.progress_reporter.persist(

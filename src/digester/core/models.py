@@ -44,7 +44,7 @@ def _merge_prefer_richer_text(current: str, update: str) -> str:
 
 
 def _word_count(text: str) -> int:
-    return len([word for word in text.strip().split() if word])
+    return len(text.split())
 
 
 @dataclass(frozen=True)
