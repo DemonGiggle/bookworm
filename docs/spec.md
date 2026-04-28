@@ -97,8 +97,8 @@ For each successful digestion run, the system must write three agent-targeted ou
 Each generated `SKILL.md` file must contain:
 
 - a stable topic title
-- YAML frontmatter with the skill name and routing description
-- when-to-use guidance that tells a downstream agent when to load the skill
+- YAML frontmatter with the skill name and explicit routing description
+- when-to-use guidance generated from dedicated routing data instead of summary inference
 - a concise purpose summary
 - a list of durable, actionable core instructions
 - workflow notes for using the skill safely with live repository context
@@ -152,6 +152,7 @@ The system may delay acting on provider completion hints until a configurable mi
 ### FR-6 Finalize Topics for Export
 
 Before writing markdown, the system must finalize or refine topic digests through the provider abstraction.
+The finalization contract must preserve an explicit routing field plus structured workflow notes so exported skill files do not have to derive router text from summaries.
 
 ### FR-7 Preserve Source Traceability
 

@@ -34,8 +34,14 @@ def parse_finalized_topics(payload: Dict[str, object], fallback_topics: List[Top
             TopicDigest(
                 slug=str(raw_topic.get("slug", "")).strip(),
                 title=str(raw_topic.get("title", "")).strip(),
+                routing_description=str(
+                    raw_topic.get("routing_description", raw_topic.get("when_to_use", ""))
+                ).strip(),
                 summary=str(raw_topic.get("summary", "")).strip(),
                 key_points=[str(point).strip() for point in raw_topic.get("key_points", []) if str(point).strip()],
+                workflow_notes=[
+                    str(note).strip() for note in raw_topic.get("workflow_notes", []) if str(note).strip()
+                ],
                 references=refs,
             )
         )

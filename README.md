@@ -4,6 +4,14 @@ Bookworm Digester ingests source documents, incrementally digests them through a
 
 Each output file is meant to behave like a reusable skill file for another agent: focused enough to stand alone, but still traceable back to the source material.
 
+Generated `SKILL.md` files preserve dedicated skill-routing data instead of inferring it from the first summary line. Each skill includes:
+
+- YAML frontmatter with an explicit routing `description`
+- `## When To Use` generated from dedicated routing guidance
+- `## Purpose` for the durable summary
+- `## Core Instructions` and `## Workflow Notes` for action-oriented detail
+- source files and source references
+
 By default, each run writes three directories beneath the chosen output directory:
 
 ```text

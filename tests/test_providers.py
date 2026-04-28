@@ -15,6 +15,7 @@ from digester.core.models import (
 )
 from digester.providers import MockLLMProvider, ProviderSettings, create_provider
 from digester.providers.ollama_provider import OllamaProvider, _normalize_base_url
+from digester.providers.parsing import parse_finalized_topics
 from digester.providers.openai_provider import OpenAIProvider
 
 
@@ -130,10 +131,12 @@ def test_mock_llm_provider_generates_deterministic_placeholder_topics() -> None:
     )
     assert [topic.slug for topic in decision.topic_updates] == ["mock-alpha-notes", "mock-beta-notes"]
     assert [topic.title for topic in decision.topic_updates] == ["Mock Alpha Notes", "Mock Beta Notes"]
+    assert all(topic.routing_description.startswith("Use this skill when validating") for topic in decision.topic_updates)
     assert all(
         "without semantically parsing the document content" in topic.summary
         for topic in decision.topic_updates
     )
+    assert all(topic.workflow_notes for topic in decision.topic_updates)
     assert all(topic.references for topic in decision.topic_updates)
 
 
@@ -157,8 +160,10 @@ def test_ollama_provider_digest_batch(monkeypatch) -> None:
                                     {
                                         "slug": "overview",
                                         "title": "Overview",
+                                        "routing_description": "Use this skill when reviewing the locally digested overview.",
                                         "summary": "Condenses the current source.",
                                         "key_points": ["Uses Ollama locally"],
+                                        "workflow_notes": ["Validate the local model output before reuse."],
                                         "references": [
                                             {
                                                 "source_id": "source",
@@ -190,6 +195,11 @@ def test_ollama_provider_digest_batch(monkeypatch) -> None:
 
     assert decision.should_continue is False
     assert decision.topic_updates[0].slug == "overview"
+    assert (
+        decision.topic_updates[0].routing_description
+        == "Use this skill when reviewing the locally digested overview."
+    )
+    assert decision.topic_updates[0].workflow_notes == ["Validate the local model output before reuse."]
 
 
 def test_ollama_provider_reports_connection_failure(monkeypatch) -> None:
@@ -206,8 +216,10 @@ def test_ollama_provider_reports_connection_failure(monkeypatch) -> None:
                 TopicDigest(
                     slug="overview",
                     title="Overview",
+                    routing_description="Use this skill when reviewing the finalized overview guidance.",
                     summary="Summary",
                     key_points=["Point"],
+                    workflow_notes=["Re-run the provider once Ollama connectivity is restored."],
                     references=[SourceRef(source_id="source", source_path="/tmp/source.txt", locator="full-document")],
                 )
             ]
@@ -257,6 +269,47 @@ def test_ollama_provider_uses_explicit_timeout_when_configured(monkeypatch) -> N
     )
 
     assert seen["timeout"] == 90
+
+
+def test_parse_finalized_topics_preserves_structured_skill_fields() -> None:
+    fallback_topic = TopicDigest(
+        slug="fallback",
+        title="Fallback",
+        routing_description="Use this skill when fallback output is required.",
+        summary="Fallback summary.",
+        key_points=["Fallback point"],
+        workflow_notes=["Fallback note"],
+        references=[SourceRef(source_id="fallback", source_path="/tmp/fallback.txt", locator="full-document")],
+    )
+
+    parsed = parse_finalized_topics(
+        {
+            "topics": [
+                {
+                    "slug": "overview",
+                    "title": "Overview",
+                    "routing_description": "Use this skill when reviewing the finalized overview guidance.",
+                    "summary": "Condenses the finalized source.",
+                    "key_points": ["Check the finalized guidance before editing."],
+                    "workflow_notes": ["Validate the cited source before applying the summarized workflow."],
+                    "references": [
+                        {
+                            "source_id": "source",
+                            "source_path": "/tmp/source.txt",
+                            "locator": "full-document",
+                        }
+                    ],
+                }
+            ]
+        },
+        fallback_topics=[fallback_topic],
+    )
+
+    assert len(parsed) == 1
+    assert parsed[0].routing_description == "Use this skill when reviewing the finalized overview guidance."
+    assert parsed[0].workflow_notes == [
+        "Validate the cited source before applying the summarized workflow."
+    ]
 
 
 def test_ollama_provider_verbose_logging_reports_request_and_response(monkeypatch) -> None:
