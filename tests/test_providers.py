@@ -272,16 +272,6 @@ def test_ollama_provider_uses_explicit_timeout_when_configured(monkeypatch) -> N
 
 
 def test_parse_finalized_topics_preserves_structured_skill_fields() -> None:
-    fallback_topic = TopicDigest(
-        slug="fallback",
-        title="Fallback",
-        routing_description="Use this skill when fallback output is required.",
-        summary="Fallback summary.",
-        key_points=["Fallback point"],
-        workflow_notes=["Fallback note"],
-        references=[SourceRef(source_id="fallback", source_path="/tmp/fallback.txt", locator="full-document")],
-    )
-
     parsed = parse_finalized_topics(
         {
             "topics": [
@@ -301,8 +291,7 @@ def test_parse_finalized_topics_preserves_structured_skill_fields() -> None:
                     ],
                 }
             ]
-        },
-        fallback_topics=[fallback_topic],
+        }
     )
 
     assert len(parsed) == 1
@@ -326,12 +315,21 @@ def test_parse_finalized_topics_treats_null_routing_description_as_empty_string(
                     "references": [],
                 }
             ]
-        },
-        fallback_topics=[],
+        }
     )
 
     assert len(parsed) == 1
     assert parsed[0].routing_description == ""
+
+
+def test_parse_finalized_topics_requires_topics_list() -> None:
+    with pytest.raises(ValueError, match="must contain a topics list"):
+        parse_finalized_topics({})
+
+
+def test_parse_finalized_topics_rejects_empty_valid_topic_list() -> None:
+    with pytest.raises(ValueError, match="contained no valid topics"):
+        parse_finalized_topics({"topics": [{"slug": "", "title": ""}]})
 
 
 def test_ollama_provider_verbose_logging_reports_request_and_response(monkeypatch) -> None:

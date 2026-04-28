@@ -43,6 +43,10 @@ def _merge_prefer_richer_text(current: str, update: str) -> str:
     return current
 
 
+def _word_count(text: str) -> int:
+    return len(text.split())
+
+
 @dataclass(frozen=True)
 class SourceRef:
     source_id: str
@@ -224,3 +228,44 @@ def combine_references(topics: Sequence[TopicDigest]) -> List[SourceRef]:
 
 def topic_lookup(topics: Sequence[TopicDigest]) -> Dict[str, TopicDigest]:
     return {topic.slug: topic for topic in topics}
+
+
+def topic_quality_issues(topic: TopicDigest) -> List[str]:
+    issues: List[str] = []
+    routing_description = topic.routing_description.strip()
+    if not routing_description:
+        issues.append("routing_description is required")
+    elif routing_description.rstrip(".").lower() == topic.title.strip().lower():
+        issues.append("routing_description must say when to use the skill, not repeat the title")
+    elif _word_count(routing_description) < 5:
+        issues.append("routing_description must be a specific when-to-use sentence")
+
+    summary = topic.summary.strip()
+    if not summary:
+        issues.append("summary is required")
+    elif _word_count(summary) < 6:
+        issues.append("summary must preserve a useful purpose description")
+
+    actionable_items = [
+        item.strip() for item in topic.key_points + topic.workflow_notes if item.strip()
+    ]
+    if len(actionable_items) < 2:
+        issues.append("at least two actionable instructions or workflow notes are required")
+
+    if not topic.references:
+        issues.append("at least one source reference is required")
+    return issues
+
+
+def validate_topics_for_export(topics: Sequence[TopicDigest]) -> List[TopicDigest]:
+    validated = list(topics)
+    for topic in validated:
+        issues = topic_quality_issues(topic)
+        if issues:
+            raise ValueError(
+                "Finalized topic '{slug}' failed export quality checks: {issues}".format(
+                    slug=topic.slug,
+                    issues="; ".join(issues),
+                )
+            )
+    return validated

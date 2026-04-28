@@ -137,8 +137,13 @@ class ManyTopicProvider(LLMProvider):
                     routing_description="Use this skill when working with skill batch {batch}.".format(
                         batch=batch_number
                     ),
-                    summary="Summary for chunk {batch}.".format(batch=batch_number),
-                    key_points=["Point {batch}".format(batch=batch_number)],
+                    summary=(
+                        "Summarizes the operational detail preserved in chunk {batch} for later reuse."
+                    ).format(batch=batch_number),
+                    key_points=[
+                        "Point {batch}".format(batch=batch_number),
+                        "Follow-up point {batch}".format(batch=batch_number),
+                    ],
                     workflow_notes=["Validate skill batch {batch} before reuse.".format(batch=batch_number)],
                     references=[chunk.source_ref],
                 )
@@ -183,8 +188,8 @@ class LimitedBatchProvider(LLMProvider):
                     routing_description="Use this skill when following the {chunk} workflow.".format(
                         chunk=chunk.chunk_id
                     ),
-                    summary="Summary",
-                    key_points=["Point"],
+                    summary="Summarizes the workflow steps captured for this chunk so they can be reused safely.",
+                    key_points=["Point", "Follow the referenced workflow carefully."],
                     workflow_notes=["Check the cited source before automating the step."],
                     references=[chunk.source_ref],
                 )
@@ -220,10 +225,19 @@ class FinalizeEachBatchProvider(LLMProvider):
                 TopicDigest(
                     slug="topic-{batch}".format(batch=request.batch_number),
                     title="Topic {batch}".format(batch=request.batch_number),
-                    routing_description="",
-                    summary="Summary {batch}".format(batch=request.batch_number),
-                    key_points=["Point {batch}".format(batch=request.batch_number)],
-                    workflow_notes=[],
+                    routing_description="Use this skill when reviewing topic batch {batch}.".format(
+                        batch=request.batch_number
+                    ),
+                    summary="Summarizes the finalized guidance captured for topic batch {batch}.".format(
+                        batch=request.batch_number
+                    ),
+                    key_points=[
+                        "Point {batch}".format(batch=request.batch_number),
+                        "Recheck the cited source before relying on topic batch {batch}.".format(
+                            batch=request.batch_number
+                        ),
+                    ],
+                    workflow_notes=["Validate topic batch {batch} before export.".format(batch=request.batch_number)],
                     references=[chunk.source_ref],
                 )
             ],
@@ -276,7 +290,8 @@ def test_document_digester_flushes_completed_topics_incrementally(tmp_path: Path
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-1" / "SKILL.md").exists()
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-2" / "SKILL.md").exists()
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-3" / "SKILL.md").exists()
-    assert "## Workflow Notes" not in skill_text
+    assert "## Workflow Notes" in skill_text
+    assert "Validate topic batch 1 before export." in skill_text
 
 
 def test_document_digester_persists_in_progress_topics_after_each_batch(tmp_path: Path) -> None:
@@ -345,3 +360,32 @@ def test_document_digester_keeps_in_progress_files_when_finalize_fails(tmp_path:
     persisted = [message for kind, message in reporter.messages if kind == "persist"]
     assert any("Persisting 1 in-progress topic digest(s)." == message for message in persisted)
     assert any("Persisting 1 in-progress topic digest(s) after an error." == message for message in persisted)
+
+
+class WeakQualityProvider(LLMProvider):
+    def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
+        chunk = request.chunk_batch[0]
+        return DigestDecision(
+            topic_updates=[
+                TopicDigest(
+                    slug="weak-skill",
+                    title="Weak skill",
+                    summary="Too short.",
+                    key_points=["Thin point"],
+                    references=[chunk.source_ref],
+                )
+            ],
+            should_continue=False,
+            rationale="No more context needed.",
+        )
+
+
+def test_document_digester_rejects_low_quality_finalized_topics(tmp_path: Path) -> None:
+    input_path = tmp_path / "source.txt"
+    input_path.write_text("A weak topic input.", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="failed export quality checks"):
+        DocumentDigester(
+            provider=WeakQualityProvider(),
+            config=DigestConfig(max_chunk_chars=40, batch_size=1, minimum_batches_before_stop=1),
+        ).digest_paths([input_path], tmp_path / "out")
