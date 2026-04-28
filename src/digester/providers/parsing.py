@@ -13,8 +13,6 @@ def parse_digest_decision(
 
 
 def parse_finalized_topics(payload: Dict[str, object]) -> List[TopicDigest]:
-    if "topics" not in payload:
-        raise ValueError("Finalized topic payload must contain a topics list.")
     finalized = payload.get("topics")
     if not isinstance(finalized, list):
         raise ValueError("Finalized topic payload must contain a topics list.")
