@@ -310,6 +310,8 @@ The user prompt includes:
 - the current chunk batch
 - hard constraints such as max active topics and anti-duplication guidance
 
+The prompt contract treats `routing_description` and `workflow_notes` as first-class topic fields so downstream skill exports do not have to infer router text from summary prose.
+
 ### 8.2 Finalization Prompt
 
 The finalization step asks the model to:
@@ -328,8 +330,10 @@ Digest response shape:
     {
       "slug": "architecture",
       "title": "Architecture",
+      "routing_description": "Use this skill when tracing the current architecture decisions and setup flow.",
       "summary": "Short summary",
       "key_points": ["Fact 1", "Fact 2"],
+      "workflow_notes": ["Check the cited source before applying the summarized workflow."],
       "references": [
         {
           "source_id": "source",
@@ -352,8 +356,10 @@ Finalize response shape:
     {
       "slug": "architecture",
       "title": "Architecture",
+      "routing_description": "Use this skill when tracing the current architecture decisions and setup flow.",
       "summary": "Final concise summary",
       "key_points": ["Fact 1", "Fact 2"],
+      "workflow_notes": ["Check the cited source before applying the summarized workflow."],
       "references": [
         {
           "source_id": "source",
@@ -446,7 +452,7 @@ Each agent export root also includes an `INSTALL.md` file with the documented pr
 - `opencode/INSTALL.md`
 - `codex/INSTALL.md`
 
-The description/frontmatter acts as the routing layer for downstream agents, so the runtime no longer emits a separate top-level `INDEX.md`.
+The description/frontmatter acts as the routing layer for downstream agents and is rendered directly from `TopicDigest.routing_description`, so the runtime no longer has to infer it from the summary body.
 
 ## 11. Public Interfaces
 

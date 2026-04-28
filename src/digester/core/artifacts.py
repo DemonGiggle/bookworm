@@ -53,13 +53,6 @@ def _unique_source_paths(topic: TopicDigest):
     return ordered
 
 
-def _topic_routing_description(topic: TopicDigest) -> str:
-    summary = topic.summary.strip()
-    first_line = next((line.strip() for line in summary.splitlines() if line.strip()), topic.title)
-    normalized = first_line.rstrip(".")
-    return "Use this skill when work requires {summary}.".format(summary=normalized)
-
-
 def _render_skill_body(topic: TopicDigest) -> str:
     summary = topic.summary.strip()
     lines = [
@@ -67,7 +60,7 @@ def _render_skill_body(topic: TopicDigest) -> str:
         "",
         "## When To Use",
         "",
-        _topic_routing_description(topic),
+        topic.routing_description.strip(),
         "",
         "## Purpose",
         "",
@@ -77,16 +70,9 @@ def _render_skill_body(topic: TopicDigest) -> str:
         "",
     ]
     lines.extend("- {point}".format(point=point) for point in topic.key_points)
-    lines.extend(
-        [
-            "",
-            "## Workflow Notes",
-            "",
-            "- Load this skill when the task matches the frontmatter description and the guidance below.",
-            "- Treat the instructions above as source-backed context, not as a replacement for checking current repository code.",
-            "- Use the source references when a decision depends on exact wording, provenance, or missing detail.",
-        ]
-    )
+    if topic.workflow_notes:
+        lines.extend(["", "## Workflow Notes", ""])
+        lines.extend("- {note}".format(note=note) for note in topic.workflow_notes)
     source_paths = _unique_source_paths(topic)
     if source_paths:
         lines.extend(["", "## Source files", ""])
@@ -111,7 +97,7 @@ def _render_skill_markdown(
     frontmatter_lines = [
         "---",
         "name: {name}".format(name=skill_dir_name),
-        "description: {description}".format(description=json.dumps(_topic_routing_description(topic))),
+        "description: {description}".format(description=json.dumps(topic.routing_description.strip())),
     ]
     if layout.compatibility:
         frontmatter_lines.append("compatibility: {compatibility}".format(compatibility=layout.compatibility))

@@ -17,6 +17,32 @@ def _dedupe_preserve_order(items: Iterable[str]) -> List[str]:
     return result
 
 
+def _dedupe_source_refs(refs: Iterable["SourceRef"]) -> List["SourceRef"]:
+    seen = set()
+    ordered_refs: List[SourceRef] = []
+    for ref in refs:
+        key = (ref.source_id, ref.source_path, ref.locator)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered_refs.append(ref)
+    return ordered_refs
+
+
+def _merge_prefer_richer_text(current: str, update: str) -> str:
+    current = current.strip()
+    update = update.strip()
+    if not update:
+        return current
+    if not current:
+        return update
+    if current == update:
+        return current
+    if len(update) > len(current):
+        return update
+    return current
+
+
 @dataclass(frozen=True)
 class SourceRef:
     source_id: str
@@ -63,10 +89,16 @@ class TopicDigest:
     slug: str
     title: str
     summary: str
+    routing_description: str = ""
     key_points: List[str] = field(default_factory=list)
+    workflow_notes: List[str] = field(default_factory=list)
     references: List[SourceRef] = field(default_factory=list)
 
     def merge(self, other: "TopicDigest") -> None:
+        self.routing_description = _merge_prefer_richer_text(
+            self.routing_description,
+            other.routing_description,
+        )
         if other.summary:
             if self.summary:
                 self.summary = "{current}\n\n{update}".format(
@@ -76,16 +108,8 @@ class TopicDigest:
             else:
                 self.summary = other.summary.strip()
         self.key_points = _dedupe_preserve_order(self.key_points + other.key_points)
-        combined_refs = self.references + other.references
-        seen = set()
-        ordered_refs: List[SourceRef] = []
-        for ref in combined_refs:
-            key = (ref.source_id, ref.source_path, ref.locator)
-            if key in seen:
-                continue
-            seen.add(key)
-            ordered_refs.append(ref)
-        self.references = ordered_refs
+        self.workflow_notes = _dedupe_preserve_order(self.workflow_notes + other.workflow_notes)
+        self.references = _dedupe_source_refs(self.references + other.references)
 
 
 @dataclass
@@ -149,12 +173,19 @@ class DigestDecision:
                 if not parsed_refs:
                     parsed_refs = list(fallback_refs)
                 key_points = raw_topic.get("key_points", [])
+                workflow_notes = raw_topic.get("workflow_notes", [])
                 topic_updates.append(
                     TopicDigest(
                         slug=str(raw_topic.get("slug", "")).strip(),
                         title=str(raw_topic.get("title", "")).strip(),
+                        routing_description=str(
+                            raw_topic.get("routing_description") or raw_topic.get("when_to_use") or ""
+                        ).strip(),
                         summary=str(raw_topic.get("summary", "")).strip(),
                         key_points=[str(point).strip() for point in key_points or [] if str(point).strip()],
+                        workflow_notes=[
+                            str(note).strip() for note in workflow_notes or [] if str(note).strip()
+                        ],
                         references=parsed_refs,
                     )
                 )
@@ -188,15 +219,7 @@ def combine_references(topics: Sequence[TopicDigest]) -> List[SourceRef]:
     refs: List[SourceRef] = []
     for topic in topics:
         refs.extend(topic.references)
-    unique_refs: List[SourceRef] = []
-    seen = set()
-    for ref in refs:
-        key = (ref.source_id, ref.source_path, ref.locator)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique_refs.append(ref)
-    return unique_refs
+    return _dedupe_source_refs(refs)
 
 
 def topic_lookup(topics: Sequence[TopicDigest]) -> Dict[str, TopicDigest]:

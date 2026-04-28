@@ -80,6 +80,9 @@ class MockLLMProvider(LLMProvider):
                 TopicDigest(
                     slug=self._topic_slug_for(source_id=source_id, source_path=source_path),
                     title="Mock {label}".format(label=_titleize(label)),
+                    routing_description=(
+                        "Use this skill when validating the digested workflow for {label} without a live LLM."
+                    ).format(label=label),
                     summary=(
                         "end-to-end validation for {label} without a real LLM response.\n\n"
                         "MockLLM generated this placeholder from source metadata and preserved "
@@ -89,6 +92,10 @@ class MockLLMProvider(LLMProvider):
                         "Treat this topic as synthetic fixture output for ingestion, orchestration, and artifact export checks.",
                         "MockLLM keeps real source references so downstream skills still point at the original files.",
                         "Switch to a real provider before using generated summaries for implementation or product decisions.",
+                    ],
+                    workflow_notes=[
+                        "Confirm the real provider contract before treating the placeholder routing text as production-ready.",
+                        "Use the preserved source references when comparing mock output to a real skill export.",
                     ],
                     references=grouped_refs[(source_id, source_path)],
                 )

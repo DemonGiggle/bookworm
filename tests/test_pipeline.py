@@ -19,6 +19,7 @@ class FakeProvider(LLMProvider):
         topic = TopicDigest(
             slug="architecture",
             title="Architecture",
+            routing_description="Use this skill when tracing the system architecture and setup flow.",
             summary=(
                 "Summarizes the system design and interfaces.\n\n"
                 "Includes enough operational detail to help another engineer follow the setup flow."
@@ -27,6 +28,10 @@ class FakeProvider(LLMProvider):
                 "Uses adapters for ingestion",
                 "Emits section-like skill files",
                 "Preserves setup detail for downstream readers",
+            ],
+            workflow_notes=[
+                "Verify the current repository flow before treating the digest as authoritative.",
+                "Use the cited source paths when exact setup wording matters.",
             ],
             references=[chunk.source_ref for chunk in request.chunk_batch],
         )
@@ -92,12 +97,14 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     assert not (output_dir / "copilot" / "installer.sh").exists()
     assert not (output_dir / "INDEX.md").exists()
     assert 'name: architecture' in topic_text
-    assert 'description: "Use this skill when work requires Summarizes the system design and interfaces."' in topic_text
+    assert 'description: "Use this skill when tracing the system architecture and setup flow."' in topic_text
     assert "## When To Use" in topic_text
     assert "## Purpose" in topic_text
     assert "## Core Instructions" in topic_text
     assert "## Workflow Notes" in topic_text
     assert "## Source files" in topic_text
+    assert "Verify the current repository flow before treating the digest as authoritative." in topic_text
+    assert "Use this skill when work requires Summarizes the system design and interfaces." not in topic_text
     assert "compatibility: opencode" in opencode_text
     assert "Project: `.github/skills/<skill-name>/SKILL.md`" in copilot_install_text
     assert "Global: `~/.copilot/skills/<skill-name>/SKILL.md`" in copilot_install_text
@@ -127,8 +134,12 @@ class ManyTopicProvider(LLMProvider):
                 TopicDigest(
                     slug="skill-{batch}".format(batch=batch_number),
                     title="Skill {batch}".format(batch=batch_number),
+                    routing_description="Use this skill when working with skill batch {batch}.".format(
+                        batch=batch_number
+                    ),
                     summary="Summary for chunk {batch}.".format(batch=batch_number),
                     key_points=["Point {batch}".format(batch=batch_number)],
+                    workflow_notes=["Validate skill batch {batch} before reuse.".format(batch=batch_number)],
                     references=[chunk.source_ref],
                 )
             ],
@@ -169,8 +180,12 @@ class LimitedBatchProvider(LLMProvider):
                 TopicDigest(
                     slug=chunk.chunk_id,
                     title=chunk.chunk_id,
+                    routing_description="Use this skill when following the {chunk} workflow.".format(
+                        chunk=chunk.chunk_id
+                    ),
                     summary="Summary",
                     key_points=["Point"],
+                    workflow_notes=["Check the cited source before automating the step."],
                     references=[chunk.source_ref],
                 )
             ],
@@ -205,8 +220,10 @@ class FinalizeEachBatchProvider(LLMProvider):
                 TopicDigest(
                     slug="topic-{batch}".format(batch=request.batch_number),
                     title="Topic {batch}".format(batch=request.batch_number),
+                    routing_description="",
                     summary="Summary {batch}".format(batch=request.batch_number),
                     key_points=["Point {batch}".format(batch=request.batch_number)],
+                    workflow_notes=[],
                     references=[chunk.source_ref],
                 )
             ],
@@ -257,9 +274,11 @@ def test_document_digester_flushes_completed_topics_incrementally(tmp_path: Path
         ["topic-3"],
     ]
     assert [topic.slug for topic in result.topics] == ["topic-1", "topic-2", "topic-3"]
+    skill_text = (output_dir / "copilot" / ".github" / "skills" / "topic-1" / "SKILL.md").read_text(encoding="utf-8")
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-1" / "SKILL.md").exists()
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-2" / "SKILL.md").exists()
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-3" / "SKILL.md").exists()
+    assert "## Workflow Notes" not in skill_text
 
 
 def test_document_digester_persists_in_progress_topics_after_each_batch(tmp_path: Path) -> None:
@@ -295,8 +314,10 @@ class EmptyFinalizeProvider(LLMProvider):
                 TopicDigest(
                     slug="recovered-topic",
                     title="Recovered Topic",
+                    routing_description="Use this skill when recovering the partially finalized topic output.",
                     summary="Summary retained before finalization failed.",
                     key_points=["Keep the partial artifact on disk."],
+                    workflow_notes=["Inspect the in-progress file before rerunning finalization."],
                     references=[chunk.source_ref],
                 )
             ],
