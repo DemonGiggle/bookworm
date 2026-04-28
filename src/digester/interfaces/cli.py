@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional, Sequence, TextIO, Tuple
 
 from ..core import DigestConfig
-from ..images import ImageAnalyzerSettings, create_image_analyzer
+from ..images import ImageAnalyzer, ImageAnalyzerSettings, create_image_analyzer
 from ..providers import ProviderSettings, create_provider
 from ..utils.progress import ConsoleProgressReporter
 from .api import DocumentDigester
@@ -60,7 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     digest_parser.add_argument(
         "--image-analyzer-kind",
-        choices=["openai", "openai-compatible", "mock-image"],
+        choices=["openai", "openai-compatible", "ollama", "mock-image"],
         help="Optional analyzer for embedded DOCX images.",
     )
     digest_parser.add_argument(
@@ -168,6 +168,10 @@ def _build_reporter(args: argparse.Namespace) -> Tuple[ConsoleProgressReporter, 
 def _resolve_api_key(args: argparse.Namespace) -> str:
     if args.provider_kind in {"ollama", "mock-llm"}:
         return ""
+    return _resolve_required_api_key(args)
+
+
+def _resolve_required_api_key(args: argparse.Namespace) -> str:
     if args.api_key_file:
         return _read_api_key_file(args.api_key_file)
     env_var_name = args.api_key_env or "OPENAI_API_KEY"
@@ -181,13 +185,13 @@ def _resolve_api_key(args: argparse.Namespace) -> str:
     return api_key
 
 
-def _resolve_image_analyzer(args: argparse.Namespace):
+def _resolve_image_analyzer(args: argparse.Namespace) -> Optional[ImageAnalyzer]:
     if not args.image_analyzer_kind:
         return None
     model = args.image_analyzer_model or args.model
     api_key = ""
-    if args.image_analyzer_kind != "mock-image":
-        api_key = _resolve_api_key(args)
+    if args.image_analyzer_kind not in {"mock-image", "ollama"}:
+        api_key = _resolve_required_api_key(args)
     return create_image_analyzer(
         ImageAnalyzerSettings(
             analyzer_kind=args.image_analyzer_kind,
@@ -195,6 +199,9 @@ def _resolve_image_analyzer(args: argparse.Namespace):
             api_key=api_key,
             base_url=args.base_url or None,
             organization=args.organization or None,
+            ollama_host=args.ollama_host,
+            ollama_port=args.ollama_port,
+            timeout_seconds=args.timeout_sc,
         )
     )
 

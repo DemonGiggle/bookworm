@@ -176,15 +176,23 @@ class DocxAdapter(SourceAdapter):
             )
         if image_analyzer is not None:
             for index, image in enumerate(embedded_images, start=1):
-                analysis = image_analyzer.analyze(image)
-                sections.append(
-                    DocumentSection(
-                        heading="Embedded image {index}".format(index=index),
-                        content=_render_image_analysis(image, analysis),
-                        source_ref=image.source_ref,
-                        content_kind="image-analysis",
+                try:
+                    analysis = image_analyzer.analyze(image)
+                    sections.append(
+                        DocumentSection(
+                            heading="Embedded image {index}".format(index=index),
+                            content=_render_image_analysis(image, analysis),
+                            source_ref=image.source_ref,
+                            content_kind="image-analysis",
+                        )
                     )
-                )
+                except Exception as error:
+                    warnings.append(
+                        "Failed to analyze embedded image {index}: {error}".format(
+                            index=index,
+                            error=error,
+                        )
+                    )
         return SourceDocument(
             source_id=source_id,
             path=path,

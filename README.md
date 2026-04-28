@@ -81,8 +81,8 @@ bookworm digest docs/*.txt \
 ```
 
 If `--ollama-port` is omitted, the CLI defaults to port `11434`.
-Use `--verbose` or `-v` to print truncated LLM request and response previews, total character counts, and round-trip timing for each model call.
-Use `--vv` to log the full escaped request and response bodies without omitting the middle.
+Use `--verbose` or `-v` to print organized, truncated request and response previews, total character counts, and round-trip timing for each model call, including embedded image analyzer calls.
+Use `--vv` to log the full request and response bodies without omitting the middle.
 Use `--log-location stdio|/path/to/bookworm.log` to keep logs on stdio or write them to a file. The default is `stdio`.
 If an Ollama model returns malformed JSON, Bookworm retries once with a stricter JSON-only instruction. If it still fails, reduce `--batch-size`, `--max-chunk-chars`, or `--max-active-topics`, or choose a model with better structured-output reliability.
 
@@ -108,6 +108,17 @@ bookworm digest docs/*.docx \
   --model gpt-4.1-mini \
   --image-analyzer-kind openai \
   --image-analyzer-model gpt-4.1-mini
+```
+
+Use `--image-analyzer-kind ollama` with a local vision-capable Ollama model such as `gemma3:4b`, `gemma3:12b`, `gemma3:27b`, or `qwen3-vl:8b`.
+
+```bash
+bookworm digest docs/*.docx \
+  --output-dir out \
+  --provider-kind ollama \
+  --model llama3.1 \
+  --image-analyzer-kind ollama \
+  --image-analyzer-model gemma3:4b
 ```
 
 Use `--image-analyzer-kind openai-compatible` to point image analysis at an OpenAI-compatible vision endpoint, or `--image-analyzer-kind mock-image` for deterministic test fixtures without a live model. If no image analyzer is configured, Bookworm keeps the existing text-only path and logs when supported inputs contain embedded images that were skipped.

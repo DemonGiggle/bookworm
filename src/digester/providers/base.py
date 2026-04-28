@@ -8,31 +8,13 @@ from ..core.models import DigestBatchRequest, DigestDecision, TopicDigest
 from ..utils.progress import NoOpProgressReporter, ProgressReporter
 
 
-def _escaped_preview(text: str, head_chars: int = 160, tail_chars: int = 80) -> str:
-    escaped = (
-        text.replace("\\", "\\\\")
-        .replace("\r", "\\r")
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-    )
+def _readable_preview(text: str, head_chars: int = 160, tail_chars: int = 80) -> str:
     if len(text) <= head_chars + tail_chars:
-        return escaped
-    head = (
-        text[:head_chars]
-        .replace("\\", "\\\\")
-        .replace("\r", "\\r")
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-    )
-    tail = (
-        text[-tail_chars:]
-        .replace("\\", "\\\\")
-        .replace("\r", "\\r")
-        .replace("\n", "\\n")
-        .replace("\t", "\\t")
-    )
+        return text
+    head = text[:head_chars]
+    tail = text[-tail_chars:]
     omitted = len(text) - head_chars - tail_chars
-    return "{head}...[omitted {omitted} chars]...{tail}".format(
+    return "{head}\n\n...[omitted {omitted} chars]...\n\n{tail}".format(
         head=head,
         omitted=omitted,
         tail=tail,
@@ -49,7 +31,7 @@ def _escaped_fragment(text: str) -> str:
 
 
 def _escaped_full_text(text: str) -> str:
-    return _escaped_fragment(text)
+    return text
 
 
 def _json_error_excerpt(text: str, position: int, radius: int = 80) -> str:
@@ -104,7 +86,7 @@ class LLMProvider(ABC):
     def _format_verbose_text(self, text: str) -> str:
         if self._verbosity_level() >= 2:
             return _escaped_full_text(text)
-        return _escaped_preview(text)
+        return _readable_preview(text)
 
     def _verbose_text_label(self) -> str:
         if self._verbosity_level() >= 2:
@@ -126,8 +108,23 @@ class LLMProvider(ABC):
             )
         )
         self.progress_reporter.verbose(
-            'Verbose: request {label}: system="{system}" user="{user}"'.format(
+            (
+                "Verbose: request {label}\n"
+                "Provider: {provider}\n"
+                "Model: {model}\n"
+                "System chars: {system_chars}\n"
+                "User chars: {user_chars}\n"
+                "--- system ---\n"
+                "{system}\n"
+                "--- user ---\n"
+                "{user}\n"
+                "--- end request ---"
+            ).format(
                 label=self._verbose_text_label(),
+                provider=provider_name,
+                model=model,
+                system_chars=system_chars,
+                user_chars=user_chars,
                 system=self._format_verbose_text(system_prompt),
                 user=self._format_verbose_text(user_prompt),
             )
@@ -149,8 +146,21 @@ class LLMProvider(ABC):
             )
         )
         self.progress_reporter.verbose(
-            'Verbose: response {label}: "{preview}"'.format(
+            (
+                "Verbose: response {label}\n"
+                "Provider: {provider}\n"
+                "Model: {model}\n"
+                "Response chars: {count}\n"
+                "Elapsed: {elapsed:.2f}s\n"
+                "--- response ---\n"
+                "{preview}\n"
+                "--- end response ---"
+            ).format(
                 label=self._verbose_text_label(),
+                provider=provider_name,
+                model=model,
+                count=len(response_text),
+                elapsed=elapsed_seconds,
                 preview=self._format_verbose_text(response_text),
             )
         )

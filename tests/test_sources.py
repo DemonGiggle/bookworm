@@ -5,6 +5,8 @@ from docx import Document
 from openpyxl import Workbook
 
 from digester.images import MockImageAnalyzer
+from digester.images.base import ImageAnalyzer
+from digester.core.models import EmbeddedImage
 from digester.sources.registry import SourceRegistry
 
 
@@ -90,6 +92,27 @@ def test_registry_loads_docx_embedded_images_with_analyzer(tmp_path: Path) -> No
     assert "Visual summary:" in image_section.content
     assert "Screenshot shows the confirmation dialog" in image_section.content
     assert documents[0].extraction_warnings == []
+
+
+class FailingImageAnalyzer(ImageAnalyzer):
+    def analyze(self, image: EmbeddedImage):
+        raise ValueError("vision request timed out")
+
+
+def test_registry_keeps_docx_text_when_embedded_image_analysis_fails(tmp_path: Path) -> None:
+    path = tmp_path / "with-image.docx"
+    _write_docx_with_embedded_image(path)
+
+    documents = SourceRegistry().load_paths([path], image_analyzer=FailingImageAnalyzer())
+
+    assert len(documents[0].sections) == 1
+    assert documents[0].sections[0].content == (
+        "Before image\n\nScreenshot shows the confirmation dialog\n\nAfter image"
+    )
+    assert documents[0].embedded_images[0].source_ref.locator == "embedded image 1 near paragraph 2"
+    assert documents[0].extraction_warnings == [
+        "Failed to analyze embedded image 1: vision request timed out"
+    ]
 
 
 def test_registry_loads_spreadsheet(tmp_path: Path) -> None:
