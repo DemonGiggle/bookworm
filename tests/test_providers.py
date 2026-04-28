@@ -312,6 +312,28 @@ def test_parse_finalized_topics_preserves_structured_skill_fields() -> None:
     ]
 
 
+def test_parse_finalized_topics_treats_null_routing_description_as_empty_string() -> None:
+    parsed = parse_finalized_topics(
+        {
+            "topics": [
+                {
+                    "slug": "overview",
+                    "title": "Overview",
+                    "routing_description": None,
+                    "summary": "Condenses the finalized source.",
+                    "key_points": ["Check the finalized guidance before editing."],
+                    "workflow_notes": [],
+                    "references": [],
+                }
+            ]
+        },
+        fallback_topics=[],
+    )
+
+    assert len(parsed) == 1
+    assert parsed[0].routing_description == ""
+
+
 def test_ollama_provider_verbose_logging_reports_request_and_response(monkeypatch) -> None:
     provider = OllamaProvider(model="llama3.1")
     reporter = RecordingVerboseReporter()

@@ -70,8 +70,9 @@ def _render_skill_body(topic: TopicDigest) -> str:
         "",
     ]
     lines.extend("- {point}".format(point=point) for point in topic.key_points)
-    lines.extend(["", "## Workflow Notes", ""])
-    lines.extend("- {note}".format(note=note) for note in topic.workflow_notes)
+    if topic.workflow_notes:
+        lines.extend(["", "## Workflow Notes", ""])
+        lines.extend("- {note}".format(note=note) for note in topic.workflow_notes)
     source_paths = _unique_source_paths(topic)
     if source_paths:
         lines.extend(["", "## Source files", ""])

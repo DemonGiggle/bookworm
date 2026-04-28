@@ -220,8 +220,10 @@ class FinalizeEachBatchProvider(LLMProvider):
                 TopicDigest(
                     slug="topic-{batch}".format(batch=request.batch_number),
                     title="Topic {batch}".format(batch=request.batch_number),
+                    routing_description="",
                     summary="Summary {batch}".format(batch=request.batch_number),
                     key_points=["Point {batch}".format(batch=request.batch_number)],
+                    workflow_notes=[],
                     references=[chunk.source_ref],
                 )
             ],
@@ -270,9 +272,11 @@ def test_document_digester_flushes_completed_topics_incrementally(tmp_path: Path
         ["topic-3"],
     ]
     assert [topic.slug for topic in result.topics] == ["topic-1", "topic-2", "topic-3"]
+    skill_text = (output_dir / "copilot" / ".github" / "skills" / "topic-1" / "SKILL.md").read_text(encoding="utf-8")
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-1" / "SKILL.md").exists()
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-2" / "SKILL.md").exists()
     assert (output_dir / "copilot" / ".github" / "skills" / "topic-3" / "SKILL.md").exists()
+    assert "## Workflow Notes" not in skill_text
 
 
 def test_document_digester_persists_in_progress_topics_after_each_batch(tmp_path: Path) -> None:
