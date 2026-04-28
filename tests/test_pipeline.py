@@ -223,9 +223,11 @@ class RecordingArtifactWriter(MarkdownArtifactWriter):
     def __init__(self) -> None:
         super().__init__()
         self.topic_batches: List[List[str]] = []
+        self.topic_summaries: List[dict[str, str]] = []
 
     def write_topics(self, topics, output_dir, progress_reporter=None):
         self.topic_batches.append([topic.slug for topic in topics])
+        self.topic_summaries.append({topic.slug: topic.summary for topic in topics})
         return super().write_topics(topics, output_dir, progress_reporter)
 
 
@@ -374,9 +376,11 @@ def test_document_digester_merges_reopened_topics_across_finalized_clusters(tmp_
     third_path.write_text("Architecture follow-up.", encoding="utf-8")
 
     provider = ReopenedTopicProvider()
+    writer = RecordingArtifactWriter()
     result = DocumentDigester(
         provider=provider,
         config=DigestConfig(max_chunk_chars=30, batch_size=1, minimum_batches_before_stop=1),
+        artifact_writer=writer,
     ).digest_paths([first_path, second_path, third_path], tmp_path / "out")
 
     assert provider.finalize_calls == [["architecture"], ["testing"], ["architecture"]]
@@ -386,3 +390,14 @@ def test_document_digester_merges_reopened_topics_across_finalized_clusters(tmp_
     assert "Architecture notes from batch 3." in architecture.summary
     assert architecture.key_points == ["Architecture point 1", "Architecture point 3"]
     assert len(architecture.references) == 2
+    assert writer.topic_batches == [
+        ["architecture"],
+        ["architecture"],
+        ["testing"],
+        ["testing"],
+        ["architecture"],
+        ["architecture"],
+    ]
+    assert writer.topic_summaries[-1]["architecture"] == architecture.summary
+    assert "Architecture notes from batch 1." in writer.topic_summaries[-1]["architecture"]
+    assert "Architecture notes from batch 3." in writer.topic_summaries[-1]["architecture"]
