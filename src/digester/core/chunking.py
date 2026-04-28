@@ -29,6 +29,7 @@ def chunk_documents(documents: List[SourceDocument], max_chunk_chars: int) -> Li
                             section_heading=section.heading,
                             text="\n\n".join(current_parts),
                             source_ref=section.source_ref,
+                            content_kind=section.content_kind,
                         )
                     )
                     chunk_index += 1
@@ -48,6 +49,7 @@ def chunk_documents(documents: List[SourceDocument], max_chunk_chars: int) -> Li
                         section_heading=section.heading,
                         text="\n\n".join(current_parts),
                         source_ref=section.source_ref,
+                        content_kind=section.content_kind,
                     )
                 )
                 chunk_index += 1

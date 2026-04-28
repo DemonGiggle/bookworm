@@ -29,6 +29,7 @@ def build_digest_system_prompt() -> str:
         "references must contain source_id, source_path, locator. "
         "Treat each topic like a section-level skill file that another agent could discover from a SKILL.md description and reuse on its own. "
         "routing_description must explicitly say when another agent should load the skill. "
+        "Some chunks may be image-analysis content derived from embedded document images; treat those summaries and key points as grounded evidence from the cited image location, not as speculative captions. "
         "Write summaries as markdown-ready purpose statements that explain what task the skill helps with and what context it preserves. "
         "Write key_points as actionable instructions, constraints, workflow steps, commands, or checks, not vague observations. "
         "workflow_notes must preserve caveats, validation checks, warnings, and source-backed operator guidance. "
@@ -54,6 +55,7 @@ def build_digest_user_prompt(request: DigestBatchRequest) -> str:
             "chunk_id": chunk.chunk_id,
             "source_path": chunk.source_path,
             "section_heading": chunk.section_heading,
+            "content_kind": chunk.content_kind,
             "locator": chunk.source_ref.locator,
             "text": chunk.text,
         }
@@ -66,6 +68,7 @@ def build_digest_user_prompt(request: DigestBatchRequest) -> str:
         "Constraints:\n"
         "- Keep at most {max_topics} active topics in view for this batch.\n"
         "- Topics should behave like section-level skill files for coding agents: each one should cover a coherent, reusable slice of the source rather than the whole corpus.\n"
+        "- image-analysis chunks come from embedded visuals; preserve concrete details from them when they add workflow, UI, diagram, or configuration evidence.\n"
         "- routing_description must say when another agent should load the skill, without copying the title.\n"
         "- Summaries should be rich, actionable, and markdown-ready, usually 2-5 compact paragraphs when the material supports it.\n"
         "- Preserve setup sequences, hardware steps, prerequisites, commands, parameter values, safety notes, verification steps, and troubleshooting clues when present.\n"

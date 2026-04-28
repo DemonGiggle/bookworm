@@ -1,10 +1,13 @@
+from base64 import b64decode
 from pathlib import Path
 from typing import List
 
 import pytest
+from docx import Document
 
 from digester.core import DigestConfig
 from digester.core.models import DigestBatchRequest, DigestDecision, TopicDigest
+from digester.images import MockImageAnalyzer
 from digester.interfaces.api import DocumentDigester
 from digester.providers.base import LLMProvider
 from digester.core.artifacts import MarkdownArtifactWriter
@@ -58,6 +61,23 @@ class RecordingReporter:
 
     def clear(self) -> None:
         self.messages.append(("clear", ""))
+
+
+def _write_test_png(path: Path) -> None:
+    path.write_bytes(
+        b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jK4QAAAAASUVORK5CYII=")
+    )
+
+
+def _write_docx_with_embedded_image(path: Path) -> None:
+    image_path = path.with_suffix(".png")
+    _write_test_png(image_path)
+    document = Document()
+    document.add_paragraph("Use the setup wizard before importing data.")
+    image_paragraph = document.add_paragraph("Screenshot shows the confirmation dialog")
+    image_paragraph.add_run().add_picture(str(image_path))
+    document.add_paragraph("Confirm the highlighted option and continue.")
+    document.save(path)
 
 
 def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
@@ -482,3 +502,56 @@ def test_document_digester_rejects_low_quality_finalized_topics(tmp_path: Path) 
             provider=WeakQualityProvider(),
             config=DigestConfig(max_chunk_chars=40, batch_size=1, minimum_batches_before_stop=1),
         ).digest_paths([input_path], tmp_path / "out")
+
+
+class ImageEchoProvider(LLMProvider):
+    def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
+        chunks = list(request.chunk_batch)
+        image_chunks = [chunk for chunk in chunks if chunk.content_kind == "image-analysis"]
+        image_summary = image_chunks[0].text if image_chunks else "No embedded image evidence was available."
+        return DigestDecision(
+            topic_updates=[
+                TopicDigest(
+                    slug="embedded-docx-images",
+                    title="Embedded DOCX Images",
+                    routing_description=(
+                        "Use this skill when the source DOCX includes embedded images that affect the workflow."
+                    ),
+                    summary=(
+                        "Summarizes the DOCX workflow and preserves embedded image evidence for downstream reuse.\n\n"
+                        "{image_summary}"
+                    ).format(image_summary=image_summary),
+                    key_points=[
+                        "Review image-analysis chunks alongside body text when the document includes screenshots or diagrams.",
+                        "Keep the embedded image locator in the final topic so downstream readers can trace visual evidence back to the source.",
+                    ],
+                    workflow_notes=[
+                        "Validate the generated guidance against the cited embedded image before automating the workflow."
+                    ],
+                    references=[chunk.source_ref for chunk in chunks],
+                )
+            ],
+            should_continue=False,
+            rationale="Embedded image evidence was captured in this batch.",
+        )
+
+
+def test_document_digester_includes_embedded_image_analysis_in_topic_output(tmp_path: Path) -> None:
+    input_path = tmp_path / "guide.docx"
+    _write_docx_with_embedded_image(input_path)
+    output_dir = tmp_path / "out"
+
+    result = DocumentDigester(
+        provider=ImageEchoProvider(),
+        image_analyzer=MockImageAnalyzer(model="fake-vision"),
+        config=DigestConfig(max_chunk_chars=400, batch_size=4, minimum_batches_before_stop=1),
+    ).digest_paths([input_path], output_dir)
+
+    skill_path = output_dir / "copilot" / ".github" / "skills" / "embedded-docx-images" / "SKILL.md"
+    skill_text = skill_path.read_text(encoding="utf-8")
+
+    assert any(chunk.content_kind == "image-analysis" for chunk in result.chunks)
+    assert skill_path.exists()
+    assert "Visual summary:" in skill_text
+    assert "Screenshot shows the confirmation dialog" in skill_text
+    assert "embedded image 1 near paragraph 2" in skill_text

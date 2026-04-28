@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from digester.core.models import DigestBatchRequest, DigestDecision, TopicDigest
+from digester.images import MockImageAnalyzer
 from digester.interfaces import cli
 from digester.providers import ProviderSettings
 from digester.providers.base import LLMProvider
@@ -548,3 +549,143 @@ def test_cli_status_report_lists_multiple_batch_sizes(tmp_path: Path, monkeypatc
     assert "- Total chars: 14" in captured.out
     assert "- Batches: 2" in captured.out
     assert "- Skills generated: 1" in captured.out
+
+
+def test_cli_creates_configured_image_analyzer(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    seen = {}
+
+    def fake_create_image_analyzer(settings):
+        seen["analyzer_kind"] = settings.analyzer_kind
+        seen["model"] = settings.model
+        return MockImageAnalyzer(model=settings.model)
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(cli, "create_provider", lambda settings: CliFakeProvider())
+    monkeypatch.setattr(cli, "create_image_analyzer", fake_create_image_analyzer)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "--image-analyzer-kind",
+            "mock-image",
+            "--image-analyzer-model",
+            "fake-vision",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert seen == {
+        "analyzer_kind": "mock-image",
+        "model": "fake-vision",
+    }
+    assert "Using image analyzer mock-image with model fake-vision." in captured.err
+
+
+def test_cli_reads_image_analyzer_api_key_when_provider_does_not_need_one(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    seen = {}
+    monkeypatch.setenv("OPENAI_API_KEY", "vision-key")
+
+    def fake_create_image_analyzer(settings):
+        seen["analyzer_kind"] = settings.analyzer_kind
+        seen["api_key"] = settings.api_key
+        seen["model"] = settings.model
+        return MockImageAnalyzer(model=settings.model)
+
+    monkeypatch.setattr(cli, "create_provider", lambda settings: CliFakeProvider())
+    monkeypatch.setattr(cli, "create_image_analyzer", fake_create_image_analyzer)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "--image-analyzer-kind",
+            "openai",
+            "--image-analyzer-model",
+            "fake-vision",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen == {
+        "analyzer_kind": "openai",
+        "api_key": "vision-key",
+        "model": "fake-vision",
+    }
+
+
+def test_cli_configures_ollama_image_analyzer_without_api_key(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    seen = {}
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    def fake_create_image_analyzer(settings):
+        seen["analyzer_kind"] = settings.analyzer_kind
+        seen["api_key"] = settings.api_key
+        seen["model"] = settings.model
+        seen["ollama_host"] = settings.ollama_host
+        seen["ollama_port"] = settings.ollama_port
+        seen["timeout_seconds"] = settings.timeout_seconds
+        return MockImageAnalyzer(model=settings.model)
+
+    monkeypatch.setattr(cli, "create_provider", lambda settings: CliFakeProvider())
+    monkeypatch.setattr(cli, "create_image_analyzer", fake_create_image_analyzer)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "--image-analyzer-kind",
+            "ollama",
+            "--image-analyzer-model",
+            "gemma3:4b",
+            "--ollama-host",
+            "192.168.1.20",
+            "--ollama-port",
+            "11435",
+            "--timeout-sc",
+            "60",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert seen == {
+        "analyzer_kind": "ollama",
+        "api_key": "",
+        "model": "gemma3:4b",
+        "ollama_host": "192.168.1.20",
+        "ollama_port": 11435,
+        "timeout_seconds": 60,
+    }
+    assert "Using image analyzer ollama with model gemma3:4b." in captured.err

@@ -62,6 +62,24 @@ class DocumentSection:
     heading: str
     content: str
     source_ref: SourceRef
+    content_kind: str = "text"
+
+
+@dataclass(frozen=True)
+class EmbeddedImage:
+    image_id: str
+    source_ref: SourceRef
+    filename: str
+    mime_type: str
+    data: bytes = field(repr=False)
+    caption: str = ""
+    context_text: str = ""
+
+
+@dataclass
+class ImageAnalysis:
+    summary: str
+    key_points: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -71,6 +89,7 @@ class SourceDocument:
     media_type: str
     title: str
     sections: List[DocumentSection]
+    embedded_images: List[EmbeddedImage] = field(default_factory=list)
     extraction_warnings: List[str] = field(default_factory=list)
 
     @property
@@ -86,6 +105,7 @@ class ContentChunk:
     section_heading: str
     text: str
     source_ref: SourceRef
+    content_kind: str = "text"
 
 
 @dataclass

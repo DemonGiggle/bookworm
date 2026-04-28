@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable, List, Optional
 
 from ..core.models import SourceDocument
+from ..images.base import ImageAnalyzer
 from ..utils.progress import NoOpProgressReporter, ProgressReporter, file_label
 from .base import SourceAdapter
 from .docx import DocxAdapter
@@ -29,6 +30,7 @@ class SourceRegistry:
         self,
         paths: Iterable[Path],
         progress_reporter: Optional[ProgressReporter] = None,
+        image_analyzer: Optional[ImageAnalyzer] = None,
     ) -> List[SourceDocument]:
         reporter = progress_reporter or NoOpProgressReporter()
         documents: List[SourceDocument] = []
@@ -39,6 +41,7 @@ class SourceRegistry:
                     self.load_paths(
                         sorted(child for child in path.iterdir()),
                         progress_reporter=reporter,
+                        image_analyzer=image_analyzer,
                     )
                 )
                 continue
@@ -49,7 +52,7 @@ class SourceRegistry:
                     adapter=adapter.__class__.__name__,
                 )
             )
-            document = adapter.load(path)
+            document = adapter.load(path, image_analyzer=image_analyzer)
             documents.append(document)
             reporter.persist(
                 "Loaded {name} with {sections} section(s).".format(
@@ -57,6 +60,13 @@ class SourceRegistry:
                     sections=len(document.sections),
                 )
             )
+            for warning in document.extraction_warnings:
+                reporter.persist(
+                    "Warning for {name}: {warning}".format(
+                        name=file_label(path),
+                        warning=warning,
+                    )
+                )
         return documents
 
     def _resolve_adapter(self, path: Path) -> SourceAdapter:

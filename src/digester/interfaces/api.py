@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, Sequence, Union
 
 from ..core import DigestConfig, DigestOrchestrator, DigestResult, MarkdownArtifactWriter
+from ..images.base import ImageAnalyzer
 from ..providers.base import LLMProvider
 from ..sources.registry import SourceRegistry
 from ..utils.progress import NoOpProgressReporter, ProgressReporter
@@ -16,12 +17,14 @@ class DocumentDigester:
         config: Optional[DigestConfig] = None,
         registry: Optional[SourceRegistry] = None,
         artifact_writer: Optional[MarkdownArtifactWriter] = None,
+        image_analyzer: Optional[ImageAnalyzer] = None,
         progress_reporter: Optional[ProgressReporter] = None,
     ) -> None:
         self.provider = provider
         self.config = config or DigestConfig()
         self.registry = registry or SourceRegistry()
         self.artifact_writer = artifact_writer or MarkdownArtifactWriter()
+        self.image_analyzer = image_analyzer
         self.progress_reporter = progress_reporter or NoOpProgressReporter()
 
     def digest_paths(self, paths: Sequence[Union[str, Path]], output_dir: Union[str, Path]) -> DigestResult:
@@ -33,6 +36,7 @@ class DocumentDigester:
         documents = self.registry.load_paths(
             normalized_paths,
             progress_reporter=self.progress_reporter,
+            image_analyzer=self.image_analyzer,
         )
         self.progress_reporter.persist(
             "Writing artifacts to {path}.".format(path=output_path)
