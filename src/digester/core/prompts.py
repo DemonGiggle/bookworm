@@ -6,6 +6,17 @@ from typing import Sequence
 from .models import DigestBatchRequest, TopicDigest
 
 
+def _source_ref_payload(topic: TopicDigest):
+    return [
+        {
+            "source_id": ref.source_id,
+            "source_path": ref.source_path,
+            "locator": ref.locator,
+        }
+        for ref in topic.references
+    ]
+
+
 def build_digest_system_prompt() -> str:
     return (
         "You are a document digestion engine. Read the supplied chunks, update a section-like skill map of the corpus, "
@@ -34,7 +45,7 @@ def build_digest_user_prompt(request: DigestBatchRequest) -> str:
             "summary": topic.summary,
             "key_points": topic.key_points,
             "workflow_notes": topic.workflow_notes,
-            "references": [ref.render() for ref in topic.references],
+            "references": _source_ref_payload(topic),
         }
         for topic in request.current_topics
     ]
@@ -96,7 +107,7 @@ def build_finalize_user_prompt(topics: Sequence[TopicDigest]) -> str:
             "summary": topic.summary,
             "key_points": topic.key_points,
             "workflow_notes": topic.workflow_notes,
-            "references": [ref.render() for ref in topic.references],
+            "references": _source_ref_payload(topic),
         }
         for topic in topics
     ]

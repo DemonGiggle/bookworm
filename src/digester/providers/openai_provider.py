@@ -148,4 +148,4 @@ class OpenAIProvider(LLMProvider):
             system_prompt=build_finalize_system_prompt(),
             user_prompt=build_finalize_user_prompt(topics),
         )
-        return parse_finalized_topics(payload)
+        return parse_finalized_topics(payload, fallback_topics=topics)
