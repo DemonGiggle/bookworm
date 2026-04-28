@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 from pypdf import PdfReader
 
 from ..core.models import DocumentSection, SourceDocument, SourceRef
+from ..images.base import ImageAnalyzer
 from .base import SourceAdapter
 
 
@@ -12,7 +14,11 @@ class PdfAdapter(SourceAdapter):
     supported_suffixes = (".pdf",)
     media_type = "application/pdf"
 
-    def load(self, path: Path) -> SourceDocument:
+    def load(
+        self,
+        path: Path,
+        image_analyzer: Optional[ImageAnalyzer] = None,
+    ) -> SourceDocument:
         reader = PdfReader(str(path))
         source_id = path.stem.replace(" ", "-").lower()
         sections = []

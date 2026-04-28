@@ -35,7 +35,7 @@ Each agent root also includes a short `INSTALL.md` that lists the documented pro
 
 - Plain text and markdown
 - PDF
-- DOCX
+- DOCX (with optional embedded image analysis)
 - XLSX/XLSM
 
 ## Provider model
@@ -96,6 +96,21 @@ bookworm digest docs/*.txt \
 ```
 
 `mock-llm` does not require an API key and intentionally produces synthetic placeholder topics from source metadata so you can validate ingestion, orchestration, and artifact export flows quickly.
+
+## Embedded image analysis
+
+Bookworm can optionally analyze embedded DOCX images and feed the resulting evidence back into the normal topic discovery flow as source-backed chunks.
+
+```bash
+bookworm digest docs/*.docx \
+  --output-dir out \
+  --provider-kind openai \
+  --model gpt-4.1-mini \
+  --image-analyzer-kind openai \
+  --image-analyzer-model gpt-4.1-mini
+```
+
+Use `--image-analyzer-kind openai-compatible` to point image analysis at an OpenAI-compatible vision endpoint, or `--image-analyzer-kind mock-image` for deterministic test fixtures without a live model. If no image analyzer is configured, Bookworm keeps the existing text-only path and logs when supported inputs contain embedded images that were skipped.
 
 After a successful run, the CLI prints a short status report to stdout with the chunk count, configured and realized batch sizes, total chunk chars, batch count, elapsed digestion time, and generated skill count.
 

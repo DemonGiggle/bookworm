@@ -1,9 +1,28 @@
+from base64 import b64decode
 from pathlib import Path
 
 from docx import Document
 from openpyxl import Workbook
 
+from digester.images import MockImageAnalyzer
 from digester.sources.registry import SourceRegistry
+
+
+def _write_test_png(path: Path) -> None:
+    path.write_bytes(
+        b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jK4QAAAAASUVORK5CYII=")
+    )
+
+
+def _write_docx_with_embedded_image(path: Path) -> None:
+    image_path = path.with_suffix(".png")
+    _write_test_png(image_path)
+    document = Document()
+    document.add_paragraph("Before image")
+    image_paragraph = document.add_paragraph("Screenshot shows the confirmation dialog")
+    image_paragraph.add_run().add_picture(str(image_path))
+    document.add_paragraph("After image")
+    document.save(path)
 
 
 def test_registry_loads_plain_text(tmp_path: Path) -> None:
@@ -40,6 +59,37 @@ def test_registry_loads_docx(tmp_path: Path) -> None:
     documents = SourceRegistry().load_paths([path])
 
     assert documents[0].sections[0].content == "First paragraph\n\nSecond paragraph"
+
+
+def test_registry_detects_docx_embedded_images_without_analyzer(tmp_path: Path) -> None:
+    path = tmp_path / "with-image.docx"
+    _write_docx_with_embedded_image(path)
+
+    documents = SourceRegistry().load_paths([path])
+
+    assert len(documents[0].sections) == 1
+    assert len(documents[0].embedded_images) == 1
+    assert documents[0].embedded_images[0].caption == "Screenshot shows the confirmation dialog"
+    assert documents[0].embedded_images[0].source_ref.locator == "embedded image 1 near paragraph 2"
+    assert documents[0].extraction_warnings == [
+        "Detected 1 embedded image(s) but no image analyzer is configured; image content was skipped."
+    ]
+
+
+def test_registry_loads_docx_embedded_images_with_analyzer(tmp_path: Path) -> None:
+    path = tmp_path / "with-image.docx"
+    _write_docx_with_embedded_image(path)
+
+    documents = SourceRegistry().load_paths([path], image_analyzer=MockImageAnalyzer(model="fake-vision"))
+
+    assert len(documents[0].sections) == 2
+    image_section = documents[0].sections[1]
+    assert image_section.heading == "Embedded image 1"
+    assert image_section.content_kind == "image-analysis"
+    assert image_section.source_ref.locator == "embedded image 1 near paragraph 2"
+    assert "Visual summary:" in image_section.content
+    assert "Screenshot shows the confirmation dialog" in image_section.content
+    assert documents[0].extraction_warnings == []
 
 
 def test_registry_loads_spreadsheet(tmp_path: Path) -> None:

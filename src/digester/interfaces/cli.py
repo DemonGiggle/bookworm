@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional, Sequence, TextIO, Tuple
 
 from ..core import DigestConfig
+from ..images import ImageAnalyzerSettings, create_image_analyzer
 from ..providers import ProviderSettings, create_provider
 from ..utils.progress import ConsoleProgressReporter
 from .api import DocumentDigester
@@ -56,6 +57,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=int(os.getenv("OLLAMA_PORT", "11434")),
         help="Port for the local Ollama server.",
+    )
+    digest_parser.add_argument(
+        "--image-analyzer-kind",
+        choices=["openai", "openai-compatible", "mock-image"],
+        help="Optional analyzer for embedded DOCX images.",
+    )
+    digest_parser.add_argument(
+        "--image-analyzer-model",
+        help="Model name for image analysis. Defaults to --model when image analysis is enabled.",
     )
     verbose_group = digest_parser.add_mutually_exclusive_group()
     verbose_group.add_argument(
@@ -106,6 +116,15 @@ def _provider_message(args: argparse.Namespace) -> str:
     return "Using provider {kind} with model {model}.".format(
         kind=args.provider_kind,
         model=args.model,
+    )
+
+
+def _image_analyzer_message(args: argparse.Namespace) -> str:
+    if not args.image_analyzer_kind:
+        return ""
+    return "Using image analyzer {kind} with model {model}.".format(
+        kind=args.image_analyzer_kind,
+        model=args.image_analyzer_model or args.model,
     )
 
 
@@ -162,6 +181,24 @@ def _resolve_api_key(args: argparse.Namespace) -> str:
     return api_key
 
 
+def _resolve_image_analyzer(args: argparse.Namespace):
+    if not args.image_analyzer_kind:
+        return None
+    model = args.image_analyzer_model or args.model
+    api_key = ""
+    if args.image_analyzer_kind != "mock-image":
+        api_key = _resolve_api_key(args)
+    return create_image_analyzer(
+        ImageAnalyzerSettings(
+            analyzer_kind=args.image_analyzer_kind,
+            model=model,
+            api_key=api_key,
+            base_url=args.base_url or None,
+            organization=args.organization or None,
+        )
+    )
+
+
 def _batch_sizes(chunk_count: int, batch_size: int) -> Sequence[int]:
     return [
         len(range(start, min(start + batch_size, chunk_count)))
@@ -209,6 +246,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
     try:
         reporter.persist(_provider_message(args))
+        image_message = _image_analyzer_message(args)
+        if image_message:
+            reporter.persist(image_message)
         provider = create_provider(
             ProviderSettings(
                 provider_kind=args.provider_kind,
@@ -221,8 +261,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 timeout_seconds=args.timeout_sc,
             )
         )
+        image_analyzer = _resolve_image_analyzer(args)
         provider.set_progress_reporter(reporter)
         provider.validate_configuration()
+        if image_analyzer is not None:
+            image_analyzer.set_progress_reporter(reporter)
+            image_analyzer.validate_configuration()
         digester = DocumentDigester(
             provider=provider,
             config=DigestConfig(
@@ -232,6 +276,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 max_batches=args.max_batches,
                 max_active_topics=args.max_active_topics,
             ),
+            image_analyzer=image_analyzer,
             progress_reporter=reporter,
         )
         started_at = time.perf_counter()

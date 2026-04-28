@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from digester.core.models import DigestBatchRequest, DigestDecision, TopicDigest
+from digester.images import MockImageAnalyzer
 from digester.interfaces import cli
 from digester.providers import ProviderSettings
 from digester.providers.base import LLMProvider
@@ -548,3 +549,44 @@ def test_cli_status_report_lists_multiple_batch_sizes(tmp_path: Path, monkeypatc
     assert "- Total chars: 14" in captured.out
     assert "- Batches: 2" in captured.out
     assert "- Skills generated: 1" in captured.out
+
+
+def test_cli_creates_configured_image_analyzer(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    seen = {}
+
+    def fake_create_image_analyzer(settings):
+        seen["analyzer_kind"] = settings.analyzer_kind
+        seen["model"] = settings.model
+        return MockImageAnalyzer(model=settings.model)
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(cli, "create_provider", lambda settings: CliFakeProvider())
+    monkeypatch.setattr(cli, "create_image_analyzer", fake_create_image_analyzer)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--provider-kind",
+            "mock-llm",
+            "--model",
+            "fake-model",
+            "--image-analyzer-kind",
+            "mock-image",
+            "--image-analyzer-model",
+            "fake-vision",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert seen == {
+        "analyzer_kind": "mock-image",
+        "model": "fake-vision",
+    }
+    assert "Using image analyzer mock-image with model fake-vision." in captured.err

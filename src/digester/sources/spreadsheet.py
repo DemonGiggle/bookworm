@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from openpyxl import load_workbook
 
 from ..core.models import DocumentSection, SourceDocument, SourceRef
+from ..images.base import ImageAnalyzer
 from .base import SourceAdapter
 
 
@@ -17,7 +18,11 @@ class SpreadsheetAdapter(SourceAdapter):
     supported_suffixes = (".xlsx", ".xlsm")
     media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    def load(self, path: Path) -> SourceDocument:
+    def load(
+        self,
+        path: Path,
+        image_analyzer: Optional[ImageAnalyzer] = None,
+    ) -> SourceDocument:
         workbook = load_workbook(filename=str(path), data_only=True, read_only=True)
         source_id = path.stem.replace(" ", "-").lower()
         sections = []

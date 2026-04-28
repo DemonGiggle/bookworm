@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 from ..core.models import DocumentSection, SourceDocument, SourceRef
+from ..images.base import ImageAnalyzer
 from .base import SourceAdapter
 
 
@@ -10,7 +12,11 @@ class PlainTextAdapter(SourceAdapter):
     supported_suffixes = (".txt", ".md", ".rst")
     media_type = "text/plain"
 
-    def load(self, path: Path) -> SourceDocument:
+    def load(
+        self,
+        path: Path,
+        image_analyzer: Optional[ImageAnalyzer] = None,
+    ) -> SourceDocument:
         content = path.read_text(encoding="utf-8")
         source_id = path.stem.replace(" ", "-").lower()
         return SourceDocument(

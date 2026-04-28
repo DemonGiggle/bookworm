@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 from ..core.models import SourceDocument
+from ..images.base import ImageAnalyzer
 
 
 class SourceAdapter(ABC):
@@ -15,5 +16,9 @@ class SourceAdapter(ABC):
         return path.suffix.lower() in self.supported_suffixes
 
     @abstractmethod
-    def load(self, path: Path) -> SourceDocument:
+    def load(
+        self,
+        path: Path,
+        image_analyzer: Optional[ImageAnalyzer] = None,
+    ) -> SourceDocument:
         raise NotImplementedError
