@@ -301,6 +301,42 @@ def test_parse_finalized_topics_preserves_structured_skill_fields() -> None:
     ]
 
 
+def test_parse_finalized_topics_restores_missing_references_from_fallback_topic() -> None:
+    fallback_ref = SourceRef(
+        source_id="source",
+        source_path="/tmp/source.txt",
+        locator="full-document",
+    )
+
+    parsed = parse_finalized_topics(
+        {
+            "topics": [
+                {
+                    "slug": "overview",
+                    "title": "Overview",
+                    "routing_description": "Use this skill when reviewing the finalized overview guidance.",
+                    "summary": "Condenses the finalized source into reusable implementation guidance.",
+                    "key_points": ["Check the finalized guidance before editing."],
+                    "workflow_notes": ["Validate the cited source before applying the workflow."],
+                    "references": [],
+                }
+            ]
+        },
+        fallback_topics=[
+            TopicDigest(
+                slug="overview",
+                title="Overview",
+                routing_description="Use this skill when reviewing the draft overview guidance.",
+                summary="Draft summary",
+                key_points=[],
+                references=[fallback_ref],
+            )
+        ],
+    )
+
+    assert parsed[0].references == [fallback_ref]
+
+
 def test_parse_finalized_topics_treats_null_routing_description_as_empty_string() -> None:
     parsed = parse_finalized_topics(
         {

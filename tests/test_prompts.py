@@ -1,3 +1,5 @@
+import json
+
 from digester.core import DigestConfig
 from digester.core.models import ContentChunk, DigestBatchRequest, SourceRef, TopicDigest
 from digester.core.prompts import (
@@ -75,3 +77,14 @@ def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
     assert "Expand weak summaries" in user_prompt
     assert "Make routing_description strong enough" in user_prompt
     assert "setup flow, operational nuance, and important edge cases" in user_prompt
+    assert '"source_id": "setup-guide"' in user_prompt
+    assert '"source_path": "/tmp/setup-guide.txt"' in user_prompt
+    assert '"locator": "section 2"' in user_prompt
+    payload = json.loads(user_prompt[user_prompt.index("[") :])
+    assert payload[0]["references"] == [
+        {
+            "source_id": "setup-guide",
+            "source_path": "/tmp/setup-guide.txt",
+            "locator": "section 2",
+        }
+    ]
