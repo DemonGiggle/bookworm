@@ -191,6 +191,7 @@ Topic digests must retain enough provenance to let a human or downstream agent k
 ### 9.4 Explicit Failure
 
 Unsupported inputs, missing credentials, empty extraction, and empty model responses must fail explicitly.
+Low-quality finalized skills must also fail explicitly instead of silently falling back to weaker pre-finalized output.
 
 ### 9.5 Controlled Coverage
 

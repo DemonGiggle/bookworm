@@ -21,8 +21,11 @@ class CliFakeProvider(LLMProvider):
                     slug="summary",
                     title="Summary",
                     routing_description="Use this skill when reviewing the concise document summary.",
-                    summary="Captures the essential content.",
-                    key_points=["Produces markdown output"],
+                    summary="Captures the essential content and preserves the main points for downstream review.",
+                    key_points=[
+                        "Produces markdown output",
+                        "Preserves source-backed guidance for later review",
+                    ],
                     workflow_notes=["Open the generated skill before sharing it with another agent."],
                     references=[chunk.source_ref for chunk in request.chunk_batch],
                 )

@@ -12,6 +12,8 @@ Generated `SKILL.md` files preserve dedicated skill-routing data instead of infe
 - `## Core Instructions` and `## Workflow Notes` for action-oriented detail
 - source files and source references
 
+Before export, Bookworm validates finalized topics so weak routing text, thin workflow guidance, or missing references fail explicitly instead of quietly producing low-signal skills.
+
 By default, each run writes three directories beneath the chosen output directory:
 
 ```text
