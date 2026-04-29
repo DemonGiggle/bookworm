@@ -40,6 +40,18 @@ def _write_docx_with_table_image(path: Path) -> None:
     document.save(path)
 
 
+def _write_docx_with_merged_table_image(path: Path) -> None:
+    image_path = path.with_suffix(".png")
+    _write_test_png(image_path)
+    document = Document()
+    table = document.add_table(rows=1, cols=2)
+    merged_cell = table.cell(0, 0).merge(table.cell(0, 1))
+    image_paragraph = merged_cell.paragraphs[0]
+    image_paragraph.text = "Screenshot in a merged table cell"
+    image_paragraph.add_run().add_picture(str(image_path))
+    document.save(path)
+
+
 class RecordingReporter:
     def __init__(self) -> None:
         self.messages = []
@@ -155,12 +167,25 @@ def test_registry_detects_docx_embedded_images_inside_tables(tmp_path: Path) -> 
     assert len(documents[0].embedded_images) == 1
     assert documents[0].embedded_images[0].caption == "Screenshot in a table cell"
     assert documents[0].embedded_images[0].source_ref.locator == "embedded image 1 near table paragraph 1"
+    assert documents[0].embedded_images[0].context_text == "Before table\nAfter table"
     assert documents[0].embedded_images[0].mime_type == "image/png"
     assert len(documents[0].embedded_images[0].data) > 0
     assert len(documents[0].sections) == 2
     image_section = documents[0].sections[1]
     assert image_section.content_kind == "image-analysis"
     assert "Screenshot in a table cell" in image_section.content
+    assert documents[0].extraction_warnings == []
+
+
+def test_registry_deduplicates_docx_embedded_images_inside_merged_table_cells(tmp_path: Path) -> None:
+    path = tmp_path / "with-merged-table-image.docx"
+    _write_docx_with_merged_table_image(path)
+
+    documents = SourceRegistry().load_paths([path], image_analyzer=MockImageAnalyzer(model="fake-vision"))
+
+    assert len(documents[0].embedded_images) == 1
+    assert documents[0].embedded_images[0].caption == "Screenshot in a merged table cell"
+    assert len([section for section in documents[0].sections if section.content_kind == "image-analysis"]) == 1
     assert documents[0].extraction_warnings == []
 
 

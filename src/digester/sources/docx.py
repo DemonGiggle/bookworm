@@ -5,6 +5,8 @@ from typing import List, Optional, Tuple
 
 from docx import Document
 from docx.document import Document as DocxDocument
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
@@ -55,17 +57,14 @@ def _mime_type_for_filename(filename: str) -> str:
     return _MIME_TYPES_BY_SUFFIX.get(PurePosixPath(filename).suffix.lower(), "application/octet-stream")
 
 
-def _table_paragraphs(document: DocxDocument) -> List[Paragraph]:
-    paragraphs: List[Paragraph] = []
-    for table in document.tables:
-        paragraphs.extend(_paragraphs_from_table(table))
-    return paragraphs
-
-
 def _paragraphs_from_table(table: Table) -> List[Paragraph]:
     paragraphs: List[Paragraph] = []
+    seen_cells = set()
     for row in table.rows:
         for cell in row.cells:
+            if cell._tc in seen_cells:
+                continue
+            seen_cells.add(cell._tc)
             paragraphs.extend(cell.paragraphs)
             for nested_table in cell.tables:
                 paragraphs.extend(_paragraphs_from_table(nested_table))
@@ -74,10 +73,17 @@ def _paragraphs_from_table(table: Table) -> List[Paragraph]:
 
 def _document_paragraphs_with_locations(document: DocxDocument) -> List[Tuple[str, int, Paragraph]]:
     located: List[Tuple[str, int, Paragraph]] = []
-    for offset, paragraph in enumerate(document.paragraphs, start=1):
-        located.append(("paragraph", offset, paragraph))
-    for offset, paragraph in enumerate(_table_paragraphs(document), start=1):
-        located.append(("table paragraph", offset, paragraph))
+    paragraph_offset = 0
+    table_paragraph_offset = 0
+    for child in document.element.body.iterchildren():
+        if isinstance(child, CT_P):
+            paragraph_offset += 1
+            located.append(("paragraph", paragraph_offset, Paragraph(child, document)))
+            continue
+        if isinstance(child, CT_Tbl):
+            for paragraph in _paragraphs_from_table(Table(child, document)):
+                table_paragraph_offset += 1
+                located.append(("table paragraph", table_paragraph_offset, paragraph))
     return located
 
 
