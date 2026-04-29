@@ -61,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     digest_parser.add_argument(
         "--image-analyzer-kind",
         choices=["openai", "openai-compatible", "ollama", "mock-image"],
-        help="Optional analyzer for embedded DOCX images.",
+        help="Optional analyzer for embedded images in supported source formats.",
     )
     digest_parser.add_argument(
         "--image-analyzer-model",
