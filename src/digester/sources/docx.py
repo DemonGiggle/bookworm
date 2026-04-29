@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from docx import Document
 from docx.document import Document as DocxDocument
+from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from ..core.models import DocumentSection, EmbeddedImage, ImageAnalysis, SourceDocument, SourceRef
@@ -54,15 +55,54 @@ def _mime_type_for_filename(filename: str) -> str:
     return _MIME_TYPES_BY_SUFFIX.get(PurePosixPath(filename).suffix.lower(), "application/octet-stream")
 
 
+def _table_paragraphs(document: DocxDocument) -> List[Paragraph]:
+    paragraphs: List[Paragraph] = []
+    for table in document.tables:
+        paragraphs.extend(_paragraphs_from_table(table))
+    return paragraphs
+
+
+def _paragraphs_from_table(table: Table) -> List[Paragraph]:
+    paragraphs: List[Paragraph] = []
+    for row in table.rows:
+        for cell in row.cells:
+            paragraphs.extend(cell.paragraphs)
+            for nested_table in cell.tables:
+                paragraphs.extend(_paragraphs_from_table(nested_table))
+    return paragraphs
+
+
+def _document_paragraphs_with_locations(document: DocxDocument) -> List[Tuple[str, int, Paragraph]]:
+    located: List[Tuple[str, int, Paragraph]] = []
+    for offset, paragraph in enumerate(document.paragraphs, start=1):
+        located.append(("paragraph", offset, paragraph))
+    for offset, paragraph in enumerate(_table_paragraphs(document), start=1):
+        located.append(("table paragraph", offset, paragraph))
+    return located
+
+
+def _locator_for_image(image_index: int, location_kind: str, location_offset: int) -> str:
+    if location_kind == "table paragraph":
+        return "embedded image {index} near table paragraph {paragraph}".format(
+            index=image_index,
+            paragraph=location_offset,
+        )
+    return "embedded image {index} near paragraph {paragraph}".format(
+        index=image_index,
+        paragraph=location_offset,
+    )
+
+
 def _extract_embedded_images(
     document: DocxDocument,
     source_id: str,
     path: Path,
 ) -> List[EmbeddedImage]:
-    paragraphs = list(document.paragraphs)
+    located_paragraphs = _document_paragraphs_with_locations(document)
+    paragraphs = [paragraph for _, _, paragraph in located_paragraphs]
     images: List[EmbeddedImage] = []
     image_index = 1
-    for paragraph_offset, paragraph in enumerate(paragraphs):
+    for paragraph_offset, (location_kind, location_number, paragraph) in enumerate(located_paragraphs):
         caption = paragraph.text.strip()
         nearby_context = "\n".join(
             _dedupe_non_empty(
@@ -91,10 +131,7 @@ def _extract_embedded_images(
                         source_ref=SourceRef(
                             source_id=source_id,
                             source_path=str(path),
-                            locator="embedded image {index} near paragraph {paragraph}".format(
-                                index=image_index,
-                                paragraph=paragraph_offset + 1,
-                            ),
+                            locator=_locator_for_image(image_index, location_kind, location_number),
                         ),
                         filename=filename or "image-{index}".format(index=image_index),
                         mime_type=getattr(image_part, "content_type", "")
@@ -142,6 +179,17 @@ def _render_image_analysis(image: EmbeddedImage, analysis: ImageAnalysis) -> str
     return "\n".join(lines)
 
 
+def _image_metadata_line(image: EmbeddedImage) -> str:
+    return (
+        "{locator}: file={filename}, mime={mime_type}, bytes={byte_count}"
+    ).format(
+        locator=image.source_ref.locator,
+        filename=image.filename or "(unnamed)",
+        mime_type=image.mime_type or "application/octet-stream",
+        byte_count=len(image.data),
+    )
+
+
 class DocxAdapter(SourceAdapter):
     supported_suffixes = (".docx",)
     media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -168,7 +216,15 @@ class DocxAdapter(SourceAdapter):
                 )
             )
         embedded_images = _extract_embedded_images(document=document, source_id=source_id, path=path)
+        notes: List[str] = []
         warnings: List[str] = []
+        if embedded_images:
+            notes.append(
+                "Detected {count} embedded image(s): {details}.".format(
+                    count=len(embedded_images),
+                    details="; ".join(_image_metadata_line(image) for image in embedded_images),
+                )
+            )
         if embedded_images and image_analyzer is None:
             warnings.append(
                 "Detected {count} embedded image(s) but no image analyzer is configured; image content was skipped."
@@ -176,6 +232,12 @@ class DocxAdapter(SourceAdapter):
             )
         if image_analyzer is not None:
             for index, image in enumerate(embedded_images, start=1):
+                notes.append(
+                    "Analyzing embedded image {index}: {details}.".format(
+                        index=index,
+                        details=_image_metadata_line(image),
+                    )
+                )
                 try:
                     analysis = image_analyzer.analyze(image)
                     sections.append(
@@ -185,6 +247,9 @@ class DocxAdapter(SourceAdapter):
                             source_ref=image.source_ref,
                             content_kind="image-analysis",
                         )
+                    )
+                    notes.append(
+                        "Analyzed embedded image {index} successfully.".format(index=index)
                     )
                 except Exception as error:
                     warnings.append(
@@ -200,5 +265,6 @@ class DocxAdapter(SourceAdapter):
             title=path.stem,
             sections=sections,
             embedded_images=embedded_images,
+            extraction_notes=notes,
             extraction_warnings=warnings,
         )

@@ -60,6 +60,13 @@ class SourceRegistry:
                     sections=len(document.sections),
                 )
             )
+            for note in document.extraction_notes:
+                reporter.persist(
+                    "Note for {name}: {note}".format(
+                        name=file_label(path),
+                        note=note,
+                    )
+                )
             for warning in document.extraction_warnings:
                 reporter.persist(
                     "Warning for {name}: {warning}".format(

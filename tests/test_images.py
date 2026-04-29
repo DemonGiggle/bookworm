@@ -178,6 +178,13 @@ def test_ollama_image_analyzer_verbose_logging_includes_model_response(monkeypat
 
     verbose_messages = [message for kind, message in reporter.messages if kind == "verbose"]
     assert any("request preview" in message and "--- system ---" in message for message in verbose_messages)
+    assert any(
+        "attaching image payload" in message
+        and "embedded image 1 near paragraph 2" in message
+        and "bytes=11" in message
+        and "base64_chars=16" in message
+        for message in verbose_messages
+    )
     assert any("response preview" in message and "setup wizard confirmation dialog" in message for message in verbose_messages)
 
 
