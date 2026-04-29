@@ -80,6 +80,14 @@ def _write_docx_with_embedded_image(path: Path) -> None:
     document.save(path)
 
 
+def _write_docx_with_only_embedded_image(path: Path) -> None:
+    image_path = path.with_suffix(".png")
+    _write_test_png(image_path)
+    document = Document()
+    document.add_picture(str(image_path))
+    document.save(path)
+
+
 def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     input_path = tmp_path / "source.txt"
     input_path.write_text(
@@ -555,3 +563,37 @@ def test_document_digester_includes_embedded_image_analysis_in_topic_output(tmp_
     assert "Visual summary:" in skill_text
     assert "Screenshot shows the confirmation dialog" in skill_text
     assert "embedded image 1 near paragraph 2" in skill_text
+
+
+def test_document_digester_processes_image_only_docx_with_analyzer(tmp_path: Path) -> None:
+    input_path = tmp_path / "image-only.docx"
+    _write_docx_with_only_embedded_image(input_path)
+    output_dir = tmp_path / "out"
+
+    result = DocumentDigester(
+        provider=ImageEchoProvider(),
+        image_analyzer=MockImageAnalyzer(model="fake-vision"),
+        config=DigestConfig(max_chunk_chars=400, batch_size=2, minimum_batches_before_stop=1),
+    ).digest_paths([input_path], output_dir)
+
+    assert len(result.documents[0].sections) == 1
+    assert result.documents[0].sections[0].content_kind == "image-analysis"
+    assert result.chunks
+    assert all(chunk.content_kind == "image-analysis" for chunk in result.chunks)
+    assert any("Visual summary:" in chunk.text for chunk in result.chunks)
+
+
+def test_document_digester_reports_missing_analyzer_for_image_only_docx(tmp_path: Path) -> None:
+    input_path = tmp_path / "image-only.docx"
+    _write_docx_with_only_embedded_image(input_path)
+
+    with pytest.raises(ValueError) as error:
+        DocumentDigester(
+            provider=ImageEchoProvider(),
+            config=DigestConfig(max_chunk_chars=400, batch_size=2, minimum_batches_before_stop=1),
+        ).digest_paths([input_path], tmp_path / "out")
+
+    message = str(error.value)
+    assert "No extractable text was found in the supplied inputs." in message
+    assert "Detected 1 embedded image(s), but no image-analysis content was available." in message
+    assert "--image-analyzer-kind ollama" in message

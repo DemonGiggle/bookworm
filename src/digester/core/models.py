@@ -103,6 +103,7 @@ class SourceDocument:
     title: str
     sections: List[DocumentSection]
     embedded_images: List[EmbeddedImage] = field(default_factory=list)
+    extraction_notes: List[str] = field(default_factory=list)
     extraction_warnings: List[str] = field(default_factory=list)
 
     @property

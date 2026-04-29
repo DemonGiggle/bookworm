@@ -17,6 +17,29 @@ from .models import (
 )
 
 
+def _no_extractable_content_error(documents: List[SourceDocument]) -> str:
+    embedded_image_count = sum(len(document.embedded_images) for document in documents)
+    warnings = [
+        warning
+        for document in documents
+        for warning in document.extraction_warnings
+    ]
+    if embedded_image_count:
+        details = [
+            "No extractable text was found in the supplied inputs.",
+            "Detected {count} embedded image(s), but no image-analysis content was available.".format(
+                count=embedded_image_count
+            ),
+        ]
+        if warnings:
+            details.append("Warnings: {warnings}".format(warnings="; ".join(warnings)))
+        details.append(
+            "For image-only DOCX files, configure a vision analyzer such as --image-analyzer-kind ollama."
+        )
+        return " ".join(details)
+    return "No extractable text was found in the supplied inputs."
+
+
 class DigestOrchestrator:
     def __init__(
         self,
@@ -39,7 +62,7 @@ class DigestOrchestrator:
         )
         chunks = chunk_documents(documents, max_chunk_chars=self.config.max_chunk_chars)
         if not chunks:
-            raise ValueError("No extractable text was found in the supplied inputs.")
+            raise ValueError(_no_extractable_content_error(documents))
 
         self.progress_reporter.persist(
             "Prepared {chunks} chunk(s) from {documents} document(s).".format(

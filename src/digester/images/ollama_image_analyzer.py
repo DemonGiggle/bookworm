@@ -47,6 +47,19 @@ class OllamaImageAnalyzer(ImageAnalyzer):
         system_prompt = _build_image_system_prompt()
         user_prompt = _build_image_user_prompt(image)
         self._log_helper._log_request("Ollama image analyzer", self.model, system_prompt, user_prompt)
+        encoded_image = base64.b64encode(image.data).decode("ascii")
+        self.progress_reporter.verbose(
+            (
+                "Verbose: attaching image payload to Ollama image analyzer request "
+                "({locator}; file={filename}; mime={mime_type}; bytes={byte_count}; base64_chars={encoded_chars})."
+            ).format(
+                locator=image.source_ref.locator,
+                filename=image.filename or "(unnamed)",
+                mime_type=image.mime_type or "application/octet-stream",
+                byte_count=len(image.data),
+                encoded_chars=len(encoded_image),
+            )
+        )
         payload = json.dumps(
             {
                 "model": self.model,
@@ -58,7 +71,7 @@ class OllamaImageAnalyzer(ImageAnalyzer):
                     {
                         "role": "user",
                         "content": user_prompt,
-                        "images": [base64.b64encode(image.data).decode("ascii")],
+                        "images": [encoded_image],
                     },
                 ],
             }
