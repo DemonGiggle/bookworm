@@ -533,6 +533,8 @@ Current error behavior is intentionally explicit:
 
 This keeps failures visible instead of silently generating misleading output.
 
+Embedded DOCX image analysis has one additional external-tool dependency: EMF/WMF previews must be converted to PNG before they are sent to vision providers. The DOCX adapter prefers Inkscape and supports both legacy `--export-png` and newer `--export-type=png --export-filename=...` CLIs. ImageMagick `magick` or `convert` is a fallback only when the local build can decode EMF/WMF. If conversion is unavailable or fails, the image is skipped with an extraction warning instead of sending unsupported bytes to the model.
+
 ## 13. Testing Strategy
 
 The current test suite covers:
@@ -550,11 +552,12 @@ The tests intentionally use fake providers for determinism and speed while prese
 
 1. No OCR support for scanned PDFs or image-heavy inputs
 2. No legacy `.doc` parser
-3. No tokenizer-aware chunk budgeting
-4. No retry/backoff or rate-limit handling in provider calls
-5. No persisted run metadata beyond generated markdown files
-6. No streaming or parallel digestion
-7. No confidence scoring or coverage reporting per topic
+3. EMF/WMF DOCX previews require a working Inkscape or EMF/WMF-capable ImageMagick installation for vision analysis
+4. No tokenizer-aware chunk budgeting
+5. No retry/backoff or rate-limit handling in provider calls
+6. No persisted run metadata beyond generated markdown files
+7. No streaming or parallel digestion
+8. No confidence scoring or coverage reporting per topic
 
 ## 15. Extension Roadmap
 

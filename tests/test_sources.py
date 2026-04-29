@@ -1,12 +1,15 @@
 from base64 import b64decode
 from pathlib import Path
+import re
+from types import SimpleNamespace
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from docx import Document
 from openpyxl import Workbook
 
 from digester.images import MockImageAnalyzer
 from digester.images.base import ImageAnalyzer
-from digester.core.models import EmbeddedImage
+from digester.core.models import EmbeddedImage, ImageAnalysis
 from digester.sources.registry import SourceRegistry
 
 
@@ -52,6 +55,64 @@ def _write_docx_with_merged_table_image(path: Path) -> None:
     document.save(path)
 
 
+def _write_docx_with_vml_image(path: Path) -> None:
+    image_path = path.with_suffix(".png")
+    _write_test_png(image_path)
+    document = Document()
+    document.add_picture(str(image_path))
+    document.save(path)
+
+    with ZipFile(path, "r") as source:
+        document_xml = source.read("word/document.xml").decode("utf-8")
+        match = re.search(r'r:embed="([^"]+)"', document_xml)
+        assert match is not None
+        rel_id = match.group(1)
+        vml_object = (
+            '<w:object><v:shape id="_x0000_i1025" type="#_x0000_t75">'
+            '<v:imagedata r:id="{rel_id}"/></v:shape></w:object>'
+        ).format(rel_id=rel_id)
+        document_xml = re.sub(
+            r"<w:drawing>.*?</w:drawing>",
+            vml_object,
+            document_xml,
+            count=1,
+            flags=re.DOTALL,
+        )
+        rewritten = path.with_suffix(".vml.docx")
+        with ZipFile(rewritten, "w", ZIP_DEFLATED) as target:
+            for item in source.infolist():
+                data = source.read(item.filename)
+                if item.filename == "word/document.xml":
+                    data = document_xml.encode("utf-8")
+                target.writestr(item, data)
+    rewritten.replace(path)
+
+
+def _write_docx_with_vml_vector_image(path: Path) -> None:
+    _write_docx_with_vml_image(path)
+    with ZipFile(path, "r") as source:
+        content_types = source.read("[Content_Types].xml").decode("utf-8")
+        content_types = content_types.replace(
+            "</Types>",
+            '<Default Extension="emf" ContentType="image/x-emf"/></Types>',
+        )
+        document_rels = source.read("word/_rels/document.xml.rels").decode("utf-8")
+        document_rels = document_rels.replace("media/image1.png", "media/image1.emf")
+        rewritten = path.with_suffix(".vector.docx")
+        with ZipFile(rewritten, "w", ZIP_DEFLATED) as target:
+            for item in source.infolist():
+                if item.filename == "word/media/image1.png":
+                    continue
+                data = source.read(item.filename)
+                if item.filename == "[Content_Types].xml":
+                    data = content_types.encode("utf-8")
+                if item.filename == "word/_rels/document.xml.rels":
+                    data = document_rels.encode("utf-8")
+                target.writestr(item, data)
+            target.writestr("word/media/image1.emf", source.read("word/media/image1.png"))
+    rewritten.replace(path)
+
+
 class RecordingReporter:
     def __init__(self) -> None:
         self.messages = []
@@ -70,6 +131,16 @@ class RecordingReporter:
 
     def clear(self) -> None:
         self.messages.append(("clear", ""))
+
+
+class CapturingImageAnalyzer(ImageAnalyzer):
+    def __init__(self) -> None:
+        super().__init__()
+        self.images = []
+
+    def analyze(self, image: EmbeddedImage) -> ImageAnalysis:
+        self.images.append(image)
+        return ImageAnalysis(summary="Converted image was analyzed.", key_points=[])
 
 
 def test_registry_loads_plain_text(tmp_path: Path) -> None:
@@ -187,6 +258,109 @@ def test_registry_deduplicates_docx_embedded_images_inside_merged_table_cells(tm
     assert documents[0].embedded_images[0].caption == "Screenshot in a merged table cell"
     assert len([section for section in documents[0].sections if section.content_kind == "image-analysis"]) == 1
     assert documents[0].extraction_warnings == []
+
+
+def test_registry_detects_docx_vml_embedded_images(tmp_path: Path) -> None:
+    path = tmp_path / "with-vml-image.docx"
+    _write_docx_with_vml_image(path)
+
+    documents = SourceRegistry().load_paths([path], image_analyzer=MockImageAnalyzer(model="fake-vision"))
+
+    assert len(documents[0].embedded_images) == 1
+    assert documents[0].embedded_images[0].source_ref.locator == "embedded image 1 near paragraph 1"
+    assert documents[0].embedded_images[0].filename == "image1.png"
+    assert documents[0].embedded_images[0].mime_type == "image/png"
+    assert len(documents[0].embedded_images[0].data) > 0
+    assert len(documents[0].sections) == 1
+    assert documents[0].sections[0].content_kind == "image-analysis"
+    assert "Visual summary:" in documents[0].sections[0].content
+    assert documents[0].extraction_warnings == []
+
+
+def test_registry_normalizes_vector_docx_images_before_analysis(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "with-vector-image.docx"
+    _write_docx_with_vml_vector_image(path)
+    analyzer = CapturingImageAnalyzer()
+
+    def fake_run(command, capture_output, text, timeout):
+        output_path = Path(command[-1].split("=", 1)[1])
+        _write_test_png(output_path)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(
+        "digester.sources.docx._image_converter_command",
+        lambda input_path, output_path: [
+            "fake-inkscape",
+            str(input_path),
+            "--export-type=png",
+            "--export-filename={output_path}".format(output_path=output_path),
+        ],
+    )
+    monkeypatch.setattr("digester.sources.docx.subprocess.run", fake_run)
+
+    documents = SourceRegistry().load_paths([path], image_analyzer=analyzer)
+
+    assert len(analyzer.images) == 1
+    assert analyzer.images[0].filename == "image1.png"
+    assert analyzer.images[0].mime_type == "image/png"
+    assert analyzer.images[0].data.startswith(b"\x89PNG")
+    assert any("Normalized embedded image for analysis" in note for note in documents[0].extraction_notes)
+    assert documents[0].extraction_warnings == []
+
+
+def test_registry_supports_legacy_inkscape_vector_conversion(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "with-vector-image.docx"
+    _write_docx_with_vml_vector_image(path)
+    analyzer = CapturingImageAnalyzer()
+
+    def fake_run(command, capture_output, text, timeout):
+        if command == ["fake-inkscape", "--help"]:
+            return SimpleNamespace(returncode=0, stdout="  -e, --export-png=FILENAME", stderr="")
+        output_arg = [part for part in command if part.startswith("--export-png=")][0]
+        output_path = Path(output_arg.split("=", 1)[1])
+        _write_test_png(output_path)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("digester.sources.docx.shutil.which", lambda name: "fake-inkscape" if name == "inkscape" else None)
+    monkeypatch.setattr("digester.sources.docx.subprocess.run", fake_run)
+
+    documents = SourceRegistry().load_paths([path], image_analyzer=analyzer)
+
+    assert len(analyzer.images) == 1
+    assert analyzer.images[0].mime_type == "image/png"
+    assert documents[0].extraction_warnings == []
+
+
+def test_registry_skips_vector_docx_images_when_normalization_fails(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "with-vector-image.docx"
+    _write_docx_with_vml_vector_image(path)
+    analyzer = CapturingImageAnalyzer()
+
+    monkeypatch.setattr(
+        "digester.sources.docx._image_converter_command",
+        lambda input_path, output_path: ["fake-convert", str(input_path), str(output_path)],
+    )
+    monkeypatch.setattr(
+        "digester.sources.docx.subprocess.run",
+        lambda command, capture_output, text, timeout: SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="no decode delegate for this image format `EMF'",
+        ),
+    )
+
+    documents = SourceRegistry().load_paths([path], image_analyzer=analyzer)
+
+    assert analyzer.images == []
+    assert documents[0].sections == []
+    assert len(documents[0].embedded_images) == 1
+    assert documents[0].extraction_warnings == [
+        (
+            "Skipped embedded image 1: Unable to convert embedded image 1 near paragraph 1: "
+            "file=image1.emf, mime=image/x-emf, bytes=68 to PNG: "
+            "no decode delegate for this image format `EMF'"
+        )
+    ]
 
 
 def test_registry_logs_docx_embedded_image_metadata(tmp_path: Path) -> None:

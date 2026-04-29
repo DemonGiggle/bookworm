@@ -38,6 +38,17 @@ Each agent root also includes a short `INSTALL.md` that lists the documented pro
 - DOCX (with optional embedded image analysis)
 - XLSX/XLSM
 
+## External tool requirements
+
+Bookworm's Python package dependencies are installed from `pyproject.toml`. Some embedded DOCX image cases also depend on optional system tools:
+
+- Ollama image analysis requires an Ollama server that supports `/api/chat` image payloads and a vision-capable model.
+- DOCX images stored as EMF/WMF previews are converted to PNG before vision analysis. Install Inkscape when you need these legacy/vector previews analyzed.
+- Supported Inkscape CLIs:
+  - Inkscape 0.92.x style: `inkscape --without-gui input.emf --export-png=output.png`
+  - Inkscape 1.x style: `inkscape input.emf --export-type=png --export-filename=output.png`
+- ImageMagick is used only as a fallback (`magick` or `convert`). ImageMagick 6/7 must be built with an EMF/WMF-capable delegate for these previews; many Linux builds cannot decode EMF by default.
+
 ## Provider model
 
 - `openai`: hosted OpenAI models
@@ -122,6 +133,8 @@ bookworm digest docs/*.docx \
 ```
 
 Use `--image-analyzer-kind openai-compatible` to point image analysis at an OpenAI-compatible vision endpoint, or `--image-analyzer-kind mock-image` for deterministic test fixtures without a live model. If no image analyzer is configured, Bookworm keeps the existing text-only path and logs when supported inputs contain embedded images that were skipped.
+
+If a DOCX contains only an embedded EMF/WMF preview, install Inkscape so Bookworm can convert the preview to PNG before sending it to the vision model. Without a working converter, the image is skipped with a warning because most vision APIs reject EMF/WMF bytes directly.
 
 After a successful run, the CLI prints a short status report to stdout with the chunk count, configured and realized batch sizes, total chunk chars, batch count, elapsed digestion time, and generated skill count.
 

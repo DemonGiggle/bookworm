@@ -369,11 +369,15 @@ All non-LLM behaviors such as file loading, chunking, adapter routing, and markd
 
 ### 17.2 Dependencies
 
-- `openai`
-- `pypdf`
-- `python-docx`
-- `openpyxl`
-- `pytest` for development
+- Python package dependencies:
+  - `openai>=1.30.0`
+  - `pypdf>=4.2.0`
+  - `python-docx>=1.1.0`
+  - `openpyxl>=3.1.2`
+  - `pytest>=8.2.0` for development
+- Optional system tools for embedded DOCX image analysis:
+  - Inkscape for EMF/WMF preview conversion to PNG. Both 0.92.x-style `--export-png` and 1.x-style `--export-type=png --export-filename=...` CLIs are supported.
+  - ImageMagick 6/7 as a fallback through `magick` or `convert`, only when the local build includes an EMF/WMF-capable delegate.
 
 ### 17.3 Environment
 
