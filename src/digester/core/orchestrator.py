@@ -34,7 +34,7 @@ def _no_extractable_content_error(documents: List[SourceDocument]) -> str:
         if warnings:
             details.append("Warnings: {warnings}".format(warnings="; ".join(warnings)))
         details.append(
-            "For image-only DOCX files, configure a vision analyzer such as --image-analyzer-kind ollama."
+            "For image-only files with embedded images, configure a vision analyzer such as --image-analyzer-kind ollama."
         )
         return " ".join(details)
     return "No extractable text was found in the supplied inputs."

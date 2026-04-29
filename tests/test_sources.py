@@ -6,6 +6,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from docx import Document
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image as SpreadsheetImage
+from PIL import Image as PilImage
 
 from digester.images import MockImageAnalyzer
 from digester.images.base import ImageAnalyzer
@@ -111,6 +113,25 @@ def _write_docx_with_vml_vector_image(path: Path) -> None:
                 target.writestr(item, data)
             target.writestr("word/media/image1.emf", source.read("word/media/image1.png"))
     rewritten.replace(path)
+
+
+def _write_pdf_with_embedded_image(path: Path) -> None:
+    image_path = path.with_suffix(".png")
+    _write_test_png(image_path)
+    with PilImage.open(image_path) as image:
+        image.convert("RGB").save(path, "PDF")
+
+
+def _write_spreadsheet_with_embedded_image(path: Path) -> None:
+    image_path = path.with_suffix(".png")
+    _write_test_png(image_path)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Summary"
+    sheet.append(["Item", "Value"])
+    sheet.append(["alpha", 3])
+    sheet.add_image(SpreadsheetImage(str(image_path)), "B2")
+    workbook.save(path)
 
 
 class RecordingReporter:
@@ -288,7 +309,7 @@ def test_registry_normalizes_vector_docx_images_before_analysis(monkeypatch, tmp
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr(
-        "digester.sources.docx._image_converter_command",
+        "digester.sources.embedded_images._image_converter_command",
         lambda input_path, output_path: [
             "fake-inkscape",
             str(input_path),
@@ -296,7 +317,7 @@ def test_registry_normalizes_vector_docx_images_before_analysis(monkeypatch, tmp
             "--export-filename={output_path}".format(output_path=output_path),
         ],
     )
-    monkeypatch.setattr("digester.sources.docx.subprocess.run", fake_run)
+    monkeypatch.setattr("digester.sources.embedded_images.subprocess.run", fake_run)
 
     documents = SourceRegistry().load_paths([path], image_analyzer=analyzer)
 
@@ -321,8 +342,11 @@ def test_registry_supports_legacy_inkscape_vector_conversion(monkeypatch, tmp_pa
         _write_test_png(output_path)
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr("digester.sources.docx.shutil.which", lambda name: "fake-inkscape" if name == "inkscape" else None)
-    monkeypatch.setattr("digester.sources.docx.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "digester.sources.embedded_images.shutil.which",
+        lambda name: "fake-inkscape" if name == "inkscape" else None,
+    )
+    monkeypatch.setattr("digester.sources.embedded_images.subprocess.run", fake_run)
 
     documents = SourceRegistry().load_paths([path], image_analyzer=analyzer)
 
@@ -337,11 +361,11 @@ def test_registry_skips_vector_docx_images_when_normalization_fails(monkeypatch,
     analyzer = CapturingImageAnalyzer()
 
     monkeypatch.setattr(
-        "digester.sources.docx._image_converter_command",
+        "digester.sources.embedded_images._image_converter_command",
         lambda input_path, output_path: ["fake-convert", str(input_path), str(output_path)],
     )
     monkeypatch.setattr(
-        "digester.sources.docx.subprocess.run",
+        "digester.sources.embedded_images.subprocess.run",
         lambda command, capture_output, text, timeout: SimpleNamespace(
             returncode=1,
             stdout="",
@@ -430,3 +454,35 @@ def test_registry_loads_spreadsheet(tmp_path: Path) -> None:
 
     assert "Item | Value" in documents[0].sections[0].content
     assert "alpha | 3" in documents[0].sections[0].content
+
+
+def test_registry_loads_pdf_embedded_images_with_analyzer(tmp_path: Path) -> None:
+    path = tmp_path / "image-only.pdf"
+    _write_pdf_with_embedded_image(path)
+
+    documents = SourceRegistry().load_paths([path], image_analyzer=MockImageAnalyzer(model="fake-vision"))
+
+    assert len(documents[0].sections) == 1
+    assert documents[0].sections[0].content_kind == "image-analysis"
+    assert documents[0].embedded_images[0].source_ref.locator == "embedded image 1 on page 1"
+    assert documents[0].embedded_images[0].mime_type.startswith("image/")
+    assert documents[0].extraction_notes[0].startswith("Detected 1 embedded image(s): embedded image 1 on page 1: ")
+    assert "Analyzed embedded image 1 successfully." in documents[0].extraction_notes
+    assert documents[0].extraction_warnings == ["Page 1 did not yield extractable text."]
+
+
+def test_registry_loads_spreadsheet_embedded_images_with_analyzer(tmp_path: Path) -> None:
+    path = tmp_path / "sheet-with-image.xlsx"
+    _write_spreadsheet_with_embedded_image(path)
+
+    documents = SourceRegistry().load_paths([path], image_analyzer=MockImageAnalyzer(model="fake-vision"))
+
+    assert len(documents[0].sections) == 2
+    assert documents[0].sections[0].heading == "Summary"
+    assert documents[0].sections[1].content_kind == "image-analysis"
+    assert documents[0].embedded_images[0].caption == "alpha | 3"
+    assert documents[0].embedded_images[0].context_text == "Item | Value"
+    assert documents[0].embedded_images[0].source_ref.locator == "embedded image 1 on sheet Summary near B2"
+    assert "alpha | 3" in documents[0].sections[1].content
+    assert "Item | Value" in documents[0].sections[1].content
+    assert documents[0].extraction_warnings == []

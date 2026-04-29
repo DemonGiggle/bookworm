@@ -4,6 +4,9 @@ from typing import List
 
 import pytest
 from docx import Document
+from openpyxl import Workbook
+from openpyxl.drawing.image import Image as SpreadsheetImage
+from PIL import Image as PilImage
 
 from digester.core import DigestConfig
 from digester.core.models import DigestBatchRequest, DigestDecision, TopicDigest
@@ -86,6 +89,25 @@ def _write_docx_with_only_embedded_image(path: Path) -> None:
     document = Document()
     document.add_picture(str(image_path))
     document.save(path)
+
+
+def _write_pdf_with_embedded_image(path: Path) -> None:
+    image_path = path.with_suffix(".png")
+    _write_test_png(image_path)
+    with PilImage.open(image_path) as image:
+        image.convert("RGB").save(path, "PDF")
+
+
+def _write_spreadsheet_with_embedded_image(path: Path) -> None:
+    image_path = path.with_suffix(".png")
+    _write_test_png(image_path)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Summary"
+    sheet.append(["Step", "Details"])
+    sheet.append(["confirm", "Check the dialog"])
+    sheet.add_image(SpreadsheetImage(str(image_path)), "B2")
+    workbook.save(path)
 
 
 def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
@@ -520,13 +542,13 @@ class ImageEchoProvider(LLMProvider):
         return DigestDecision(
             topic_updates=[
                 TopicDigest(
-                    slug="embedded-docx-images",
-                    title="Embedded DOCX Images",
+                    slug="embedded-source-images",
+                    title="Embedded Source Images",
                     routing_description=(
-                        "Use this skill when the source DOCX includes embedded images that affect the workflow."
+                        "Use this skill when the source documents include embedded images that affect the workflow."
                     ),
                     summary=(
-                        "Summarizes the DOCX workflow and preserves embedded image evidence for downstream reuse.\n\n"
+                        "Summarizes the source workflow and preserves embedded image evidence for downstream reuse.\n\n"
                         "{image_summary}"
                     ).format(image_summary=image_summary),
                     key_points=[
@@ -555,7 +577,7 @@ def test_document_digester_includes_embedded_image_analysis_in_topic_output(tmp_
         config=DigestConfig(max_chunk_chars=400, batch_size=4, minimum_batches_before_stop=1),
     ).digest_paths([input_path], output_dir)
 
-    skill_path = output_dir / "copilot" / ".github" / "skills" / "embedded-docx-images" / "SKILL.md"
+    skill_path = output_dir / "copilot" / ".github" / "skills" / "embedded-source-images" / "SKILL.md"
     skill_text = skill_path.read_text(encoding="utf-8")
 
     assert any(chunk.content_kind == "image-analysis" for chunk in result.chunks)
@@ -583,6 +605,45 @@ def test_document_digester_processes_image_only_docx_with_analyzer(tmp_path: Pat
     assert any("Visual summary:" in chunk.text for chunk in result.chunks)
 
 
+def test_document_digester_processes_image_only_pdf_with_analyzer(tmp_path: Path) -> None:
+    input_path = tmp_path / "image-only.pdf"
+    _write_pdf_with_embedded_image(input_path)
+    output_dir = tmp_path / "out"
+
+    result = DocumentDigester(
+        provider=ImageEchoProvider(),
+        image_analyzer=MockImageAnalyzer(model="fake-vision"),
+        config=DigestConfig(max_chunk_chars=400, batch_size=2, minimum_batches_before_stop=1),
+    ).digest_paths([input_path], output_dir)
+
+    assert len(result.documents[0].sections) == 1
+    assert result.documents[0].sections[0].content_kind == "image-analysis"
+    assert result.documents[0].sections[0].source_ref.locator == "embedded image 1 on page 1"
+    assert result.chunks
+    assert all(chunk.content_kind == "image-analysis" for chunk in result.chunks)
+    assert any(chunk.source_ref.locator == "embedded image 1 on page 1" for chunk in result.chunks)
+
+
+def test_document_digester_includes_spreadsheet_image_analysis_in_topic_output(tmp_path: Path) -> None:
+    input_path = tmp_path / "guide.xlsx"
+    _write_spreadsheet_with_embedded_image(input_path)
+    output_dir = tmp_path / "out"
+
+    result = DocumentDigester(
+        provider=ImageEchoProvider(),
+        image_analyzer=MockImageAnalyzer(model="fake-vision"),
+        config=DigestConfig(max_chunk_chars=400, batch_size=4, minimum_batches_before_stop=1),
+    ).digest_paths([input_path], output_dir)
+
+    skill_path = output_dir / "copilot" / ".github" / "skills" / "embedded-source-images" / "SKILL.md"
+    skill_text = skill_path.read_text(encoding="utf-8")
+
+    assert any(chunk.content_kind == "image-analysis" for chunk in result.chunks)
+    assert skill_path.exists()
+    assert "embedded image 1 on sheet Summary near B2" in skill_text
+    assert "Check the dialog" in skill_text
+
+
 def test_document_digester_reports_missing_analyzer_for_image_only_docx(tmp_path: Path) -> None:
     input_path = tmp_path / "image-only.docx"
     _write_docx_with_only_embedded_image(input_path)
@@ -596,4 +657,5 @@ def test_document_digester_reports_missing_analyzer_for_image_only_docx(tmp_path
     message = str(error.value)
     assert "No extractable text was found in the supplied inputs." in message
     assert "Detected 1 embedded image(s), but no image-analysis content was available." in message
+    assert "For image-only files with embedded images" in message
     assert "--image-analyzer-kind ollama" in message

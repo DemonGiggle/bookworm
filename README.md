@@ -35,12 +35,12 @@ Each agent root also includes a short `INSTALL.md` that lists the documented pro
 
 - Plain text and markdown
 - PDF
-- DOCX (with optional embedded image analysis)
+- DOCX
 - XLSX/XLSM
 
 ## External tool requirements
 
-Bookworm's Python package dependencies are installed from `pyproject.toml`. Some embedded DOCX image cases also depend on optional system tools:
+Bookworm's Python package dependencies are installed from `pyproject.toml`. Embedded PDF, DOCX, and spreadsheet image extraction relies on Pillow, which is installed with the package. Some embedded image cases also depend on optional system tools:
 
 - Ollama image analysis requires an Ollama server that supports `/api/chat` image payloads and a vision-capable model.
 - DOCX images stored as EMF/WMF previews are converted to PNG before vision analysis. Install Inkscape when you need these legacy/vector previews analyzed.
@@ -110,10 +110,10 @@ bookworm digest docs/*.txt \
 
 ## Embedded image analysis
 
-Bookworm can optionally analyze embedded DOCX images and feed the resulting evidence back into the normal topic discovery flow as source-backed chunks.
+Bookworm can optionally analyze embedded images from supported PDF, DOCX, XLSX, and XLSM sources and feed the resulting evidence back into the normal topic discovery flow as source-backed chunks.
 
 ```bash
-bookworm digest docs/*.docx \
+bookworm digest docs/*.{pdf,docx,xlsx,xlsm} \
   --output-dir out \
   --provider-kind openai \
   --model gpt-4.1-mini \
@@ -135,6 +135,8 @@ bookworm digest docs/*.docx \
 Use `--image-analyzer-kind openai-compatible` to point image analysis at an OpenAI-compatible vision endpoint, or `--image-analyzer-kind mock-image` for deterministic test fixtures without a live model. If no image analyzer is configured, Bookworm keeps the existing text-only path and logs when supported inputs contain embedded images that were skipped.
 
 If a DOCX contains only an embedded EMF/WMF preview, install Inkscape so Bookworm can convert the preview to PNG before sending it to the vision model. Without a working converter, the image is skipped with a warning because most vision APIs reject EMF/WMF bytes directly.
+
+Spreadsheet image extraction requires loading XLSX/XLSM workbooks in normal mode rather than `read_only=True`, so very large spreadsheets with embedded images can use more memory than text-only ingestion.
 
 After a successful run, the CLI prints a short status report to stdout with the chunk count, configured and realized batch sizes, total chunk chars, batch count, elapsed digestion time, and generated skill count.
 
