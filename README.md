@@ -136,6 +136,8 @@ Use `--image-analyzer-kind openai-compatible` to point image analysis at an Open
 
 If a DOCX contains only an embedded EMF/WMF preview, install Inkscape so Bookworm can convert the preview to PNG before sending it to the vision model. Without a working converter, the image is skipped with a warning because most vision APIs reject EMF/WMF bytes directly.
 
+Spreadsheet image extraction requires loading XLSX/XLSM workbooks in normal mode rather than `read_only=True`, so very large spreadsheets with embedded images can use more memory than text-only ingestion.
+
 After a successful run, the CLI prints a short status report to stdout with the chunk count, configured and realized batch sizes, total chunk chars, batch count, elapsed digestion time, and generated skill count.
 
 ## Loop semantics

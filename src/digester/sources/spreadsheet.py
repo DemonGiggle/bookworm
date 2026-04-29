@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from pathlib import Path, PurePosixPath
-from typing import List, Optional
+from typing import Dict, List, Optional, Sequence
 
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
@@ -16,13 +17,20 @@ def _render_row(row: List[object]) -> str:
     return " | ".join("" if cell is None else str(cell) for cell in row).strip()
 
 
-def _nearest_non_empty_row_text(rows_by_index, start_index: int, step: int, max_row: int) -> str:
-    index = start_index + step
-    while 1 <= index <= max_row:
-        text = rows_by_index.get(index, "").strip()
-        if text:
-            return text
-        index += step
+def _nearest_non_empty_row_text(
+    rows_by_index: Dict[int, str],
+    non_empty_rows: Sequence[int],
+    start_index: int,
+    step: int,
+) -> str:
+    if step > 0:
+        position = bisect_right(non_empty_rows, start_index)
+        if position < len(non_empty_rows):
+            return rows_by_index[non_empty_rows[position]]
+        return ""
+    position = bisect_left(non_empty_rows, start_index) - 1
+    if position >= 0:
+        return rows_by_index[non_empty_rows[position]]
     return ""
 
 
@@ -38,26 +46,23 @@ def _dedupe_non_empty(items: List[str]) -> List[str]:
     return result
 
 
+def _image_position(image) -> tuple:
+    marker = getattr(getattr(image, "anchor", None), "_from", None)
+    if marker is None:
+        return (0, 0)
+    return (marker.row, marker.col)
+
+
 def _embedded_images_for_sheet(
     sheet,
     source_id: str,
     path: Path,
-    rows_by_index,
-    max_row: int,
+    rows_by_index: Dict[int, str],
+    non_empty_rows: Sequence[int],
     image_offset: int,
 ) -> List[EmbeddedImage]:
     embedded_images: List[EmbeddedImage] = []
-    images = sorted(
-        getattr(sheet, "_images", []),
-        key=lambda image: (
-            getattr(getattr(image, "anchor", None), "_from", None).row
-            if getattr(getattr(image, "anchor", None), "_from", None) is not None
-            else 0,
-            getattr(getattr(image, "anchor", None), "_from", None).col
-            if getattr(getattr(image, "anchor", None), "_from", None) is not None
-            else 0,
-        ),
-    )
+    images = sorted(getattr(sheet, "_images", []), key=_image_position)
     for image in images:
         marker = getattr(getattr(image, "anchor", None), "_from", None)
         row_number = (marker.row + 1) if marker is not None else 1
@@ -78,8 +83,8 @@ def _embedded_images_for_sheet(
         context_text = "\n".join(
             _dedupe_non_empty(
                 [
-                    _nearest_non_empty_row_text(rows_by_index, row_number, -1, max_row),
-                    _nearest_non_empty_row_text(rows_by_index, row_number, 1, max_row),
+                    _nearest_non_empty_row_text(rows_by_index, non_empty_rows, row_number, -1),
+                    _nearest_non_empty_row_text(rows_by_index, non_empty_rows, row_number, 1),
                 ]
             )
         )
@@ -125,12 +130,13 @@ class SpreadsheetAdapter(SourceAdapter):
         image_offset = 1
         for sheet in workbook.worksheets:
             rows = []
-            rows_by_index = {}
+            rows_by_index: Dict[int, str] = {}
             for row_index, row in enumerate(sheet.iter_rows(values_only=True), start=1):
                 rendered = _render_row(list(row))
                 if rendered:
                     rows.append(rendered)
                     rows_by_index[row_index] = rendered
+            non_empty_rows = sorted(rows_by_index)
             sections.append(
                 DocumentSection(
                     heading=sheet.title,
@@ -147,7 +153,7 @@ class SpreadsheetAdapter(SourceAdapter):
                 source_id=source_id,
                 path=path,
                 rows_by_index=rows_by_index,
-                max_row=sheet.max_row,
+                non_empty_rows=non_empty_rows,
                 image_offset=image_offset,
             )
             embedded_images.extend(sheet_images)
