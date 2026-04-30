@@ -33,7 +33,7 @@ Each agent root also includes a short `INSTALL.md` that lists the documented pro
 
 ## Supported inputs
 
-- Plain text and markdown
+- UTF-8 text files, including plain text, markdown, programming source files, configuration files, and extensionless text files
 - PDF
 - DOCX
 - XLSX/XLSM
@@ -77,6 +77,16 @@ bookworm digest docs/*.txt \
   --model gpt-4.1-mini \
   --api-key-file ~/.config/bookworm/openai.key \
   --max-active-topics 16
+```
+
+Use `--recursive` when an input path is a directory and you want Bookworm to scan nested folders instead of just the directory's top-level supported files.
+
+```bash
+bookworm digest path/to/repo \
+  --recursive \
+  --output-dir out \
+  --provider-kind mock-llm \
+  --model fake-model
 ```
 
 ## Ollama example

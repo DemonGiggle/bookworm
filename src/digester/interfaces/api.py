@@ -27,7 +27,12 @@ class DocumentDigester:
         self.image_analyzer = image_analyzer
         self.progress_reporter = progress_reporter or NoOpProgressReporter()
 
-    def digest_paths(self, paths: Sequence[Union[str, Path]], output_dir: Union[str, Path]) -> DigestResult:
+    def digest_paths(
+        self,
+        paths: Sequence[Union[str, Path]],
+        output_dir: Union[str, Path],
+        recursive_directories: bool = False,
+    ) -> DigestResult:
         normalized_paths = [Path(path).resolve() for path in paths]
         output_path = Path(output_dir).resolve()
         self.progress_reporter.persist(
@@ -37,6 +42,7 @@ class DocumentDigester:
             normalized_paths,
             progress_reporter=self.progress_reporter,
             image_analyzer=self.image_analyzer,
+            recursive_directories=recursive_directories,
         )
         self.progress_reporter.persist(
             "Writing artifacts to {path}.".format(path=output_path)

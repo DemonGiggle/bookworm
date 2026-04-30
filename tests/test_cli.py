@@ -83,6 +83,34 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
     assert "Generated" in captured.err
 
 
+def test_cli_digest_command_passes_recursive_directory_flag(monkeypatch, tmp_path: Path, capsys) -> None:
+    docs_dir = tmp_path / "docs"
+    nested_dir = docs_dir / "guides"
+    nested_dir.mkdir(parents=True)
+    (docs_dir / "overview.txt").write_text("overview", encoding="utf-8")
+    (nested_dir / "setup.py").write_text("print('nested')\n", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
+    monkeypatch.setattr(cli, "create_provider", lambda settings: CliFakeProvider())
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(docs_dir),
+            "--recursive",
+            "--output-dir",
+            str(output_dir),
+            "--model",
+            "fake-model",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Loaded overview.txt with 1 section(s)." in captured.err
+    assert "Loaded setup.py with 1 section(s)." in captured.err
+
+
 def test_cli_validates_provider_before_digestion(monkeypatch, tmp_path: Path, capsys) -> None:
     input_path = tmp_path / "notes.txt"
     input_path.write_text("A concise document.", encoding="utf-8")

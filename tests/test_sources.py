@@ -174,7 +174,7 @@ def test_registry_loads_plain_text(tmp_path: Path) -> None:
     assert documents[0].sections[0].content == "alpha\n\nbeta"
 
 
-def test_registry_recursively_loads_supported_files_from_directories(tmp_path: Path) -> None:
+def test_registry_loads_only_top_level_supported_files_from_directories_by_default(tmp_path: Path) -> None:
     nested_dir = tmp_path / "docs" / "guides"
     nested_dir.mkdir(parents=True)
     root_path = tmp_path / "docs" / "overview.txt"
@@ -185,7 +185,53 @@ def test_registry_recursively_loads_supported_files_from_directories(tmp_path: P
     documents = SourceRegistry().load_paths([tmp_path / "docs"])
 
     loaded_paths = {document.path for document in documents}
+    assert loaded_paths == {root_path}
+
+
+def test_registry_recursively_loads_supported_files_from_directories_when_requested(tmp_path: Path) -> None:
+    nested_dir = tmp_path / "docs" / "guides"
+    nested_dir.mkdir(parents=True)
+    root_path = tmp_path / "docs" / "overview.txt"
+    nested_path = nested_dir / "setup.md"
+    root_path.write_text("root document", encoding="utf-8")
+    nested_path.write_text("nested document", encoding="utf-8")
+
+    documents = SourceRegistry().load_paths([tmp_path / "docs"], recursive_directories=True)
+
+    loaded_paths = {document.path for document in documents}
     assert loaded_paths == {root_path, nested_path}
+
+
+def test_registry_skips_unsupported_files_while_scanning_directories(tmp_path: Path) -> None:
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    supported_path = docs_dir / "notes.txt"
+    unsupported_path = docs_dir / "diagram.png"
+    supported_path.write_text("plain text", encoding="utf-8")
+    _write_test_png(unsupported_path)
+
+    documents = SourceRegistry().load_paths([docs_dir])
+
+    assert [document.path for document in documents] == [supported_path]
+
+
+def test_registry_supports_utf8_text_files_as_plain_text(tmp_path: Path) -> None:
+    python_path = tmp_path / "main.py"
+    dockerfile_path = tmp_path / "Dockerfile"
+    env_path = tmp_path / ".env.local"
+    extensionless_path = tmp_path / "BUILD"
+    python_path.write_text("print('hello')\n", encoding="utf-8")
+    dockerfile_path.write_text("FROM python:3.12\n", encoding="utf-8")
+    env_path.write_text("DEBUG=true\n", encoding="utf-8")
+    extensionless_path.write_text("steps: [lint, test]\n", encoding="utf-8")
+
+    documents = SourceRegistry().load_paths([python_path, dockerfile_path, env_path, extensionless_path])
+
+    assert [document.path for document in documents] == [python_path, dockerfile_path, env_path, extensionless_path]
+    assert documents[0].sections[0].content == "print('hello')\n"
+    assert documents[1].sections[0].content == "FROM python:3.12\n"
+    assert documents[2].sections[0].content == "DEBUG=true\n"
+    assert documents[3].sections[0].content == "steps: [lint, test]\n"
 
 
 def test_registry_loads_docx(tmp_path: Path) -> None:
