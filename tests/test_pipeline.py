@@ -175,6 +175,31 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     assert any("Generated " in message and "copilot/INSTALL.md" in message for message in persisted)
 
 
+def test_document_digester_recursively_loads_directory_inputs_only_when_requested(tmp_path: Path) -> None:
+    docs_dir = tmp_path / "docs"
+    nested_dir = docs_dir / "guides"
+    nested_dir.mkdir(parents=True)
+    root_path = docs_dir / "overview.txt"
+    nested_path = nested_dir / "setup.py"
+    root_path.write_text("Top-level overview.", encoding="utf-8")
+    nested_path.write_text("print('nested setup')\n", encoding="utf-8")
+
+    non_recursive_result = DocumentDigester(
+        provider=FakeProvider(),
+        config=DigestConfig(max_chunk_chars=200, batch_size=10),
+    ).digest_paths([docs_dir], tmp_path / "out-non-recursive")
+
+    recursive_result = DocumentDigester(
+        provider=FakeProvider(),
+        config=DigestConfig(max_chunk_chars=200, batch_size=10),
+    ).digest_paths([docs_dir], tmp_path / "out-recursive", recursive_directories=True)
+
+    non_recursive_paths = {Path(chunk.source_ref.source_path) for chunk in non_recursive_result.chunks}
+    recursive_paths = {Path(chunk.source_ref.source_path) for chunk in recursive_result.chunks}
+    assert non_recursive_paths == {root_path}
+    assert recursive_paths == {root_path, nested_path}
+
+
 class ManyTopicProvider(LLMProvider):
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         chunk = request.chunk_batch[0]

@@ -20,6 +20,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     digest_parser = subparsers.add_parser("digest", help="Digest source files into markdown artifacts.")
     digest_parser.add_argument("inputs", nargs="+", help="Input files or directories to digest.")
+    digest_parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recursively scan nested directories when an input path is a directory.",
+    )
     digest_parser.add_argument("--output-dir", required=True, help="Directory for markdown outputs.")
     digest_parser.add_argument(
         "--provider-kind",
@@ -287,7 +292,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             progress_reporter=reporter,
         )
         started_at = time.perf_counter()
-        result = digester.digest_paths(args.inputs, args.output_dir)
+        result = digester.digest_paths(
+            args.inputs,
+            args.output_dir,
+            recursive_directories=args.recursive,
+        )
         elapsed_seconds = time.perf_counter() - started_at
         chunk_count = len(result.chunks)
         batch_sizes = list(_batch_sizes(chunk_count, args.batch_size))
