@@ -202,6 +202,29 @@ def test_registry_recursively_loads_supported_files_from_directories_when_reques
     assert loaded_paths == {root_path, nested_path}
 
 
+def test_registry_skips_symbolic_link_directories_during_recursive_scan(tmp_path: Path) -> None:
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    supported_path = docs_dir / "notes.txt"
+    loop_path = docs_dir / "loop"
+    supported_path.write_text("plain text", encoding="utf-8")
+    loop_path.symlink_to(docs_dir, target_is_directory=True)
+    reporter = RecordingReporter()
+
+    documents = SourceRegistry().load_paths(
+        [docs_dir],
+        progress_reporter=reporter,
+        recursive_directories=True,
+    )
+
+    persisted = [message for kind, message in reporter.messages if kind == "persist"]
+    assert [document.path for document in documents] == [supported_path]
+    assert any(
+        message == "Skipping symbolic link directory loop to avoid recursive directory cycles."
+        for message in persisted
+    )
+
+
 def test_registry_skips_unsupported_files_while_scanning_directories(tmp_path: Path) -> None:
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
@@ -213,6 +236,25 @@ def test_registry_skips_unsupported_files_while_scanning_directories(tmp_path: P
     documents = SourceRegistry().load_paths([docs_dir])
 
     assert [document.path for document in documents] == [supported_path]
+
+
+def test_registry_skips_unreadable_supported_files_while_scanning_directories(tmp_path: Path) -> None:
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    supported_path = docs_dir / "notes.txt"
+    broken_docx_path = docs_dir / "broken.docx"
+    supported_path.write_text("plain text", encoding="utf-8")
+    broken_docx_path.write_text("not a real docx archive", encoding="utf-8")
+    reporter = RecordingReporter()
+
+    documents = SourceRegistry().load_paths([docs_dir], progress_reporter=reporter)
+
+    persisted = [message for kind, message in reporter.messages if kind == "persist"]
+    assert [document.path for document in documents] == [supported_path]
+    assert any(
+        message.startswith("Warning for broken.docx: Skipped unreadable source file:")
+        for message in persisted
+    )
 
 
 def test_registry_supports_utf8_text_files_as_plain_text(tmp_path: Path) -> None:
@@ -232,6 +274,16 @@ def test_registry_supports_utf8_text_files_as_plain_text(tmp_path: Path) -> None
     assert documents[1].sections[0].content == "FROM python:3.12\n"
     assert documents[2].sections[0].content == "DEBUG=true\n"
     assert documents[3].sections[0].content == "steps: [lint, test]\n"
+
+
+def test_registry_accepts_utf8_text_when_sample_ends_mid_character(tmp_path: Path) -> None:
+    path = tmp_path / "BUILD"
+    path.write_bytes((b"a" * 8191) + "é".encode("utf-8") + b"\n")
+
+    documents = SourceRegistry().load_paths([path])
+
+    assert len(documents) == 1
+    assert documents[0].sections[0].content == ("a" * 8191) + "é\n"
 
 
 def test_registry_loads_docx(tmp_path: Path) -> None:

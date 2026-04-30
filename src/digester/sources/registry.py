@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable, List, Optional
+from zipfile import BadZipFile
+
+from openpyxl.utils.exceptions import InvalidFileException
+from docx.opc.exceptions import PackageNotFoundError
+from pypdf.errors import PdfReadError
 
 from ..core.models import SourceDocument
 from ..images.base import ImageAnalyzer
@@ -11,6 +16,15 @@ from .docx import DocxAdapter
 from .pdf import PdfAdapter
 from .spreadsheet import SpreadsheetAdapter
 from .text import PlainTextAdapter
+
+_RECOVERABLE_LOAD_ERRORS = (
+    OSError,
+    UnicodeDecodeError,
+    BadZipFile,
+    InvalidFileException,
+    PackageNotFoundError,
+    PdfReadError,
+)
 
 
 class SourceRegistry:
@@ -60,6 +74,13 @@ class SourceRegistry:
         progress_reporter.persist("Scanning directory {name}.".format(name=file_label(path)))
         documents: List[SourceDocument] = []
         for child in sorted(path.iterdir()):
+            if child.is_symlink() and child.is_dir():
+                progress_reporter.persist(
+                    "Skipping symbolic link directory {name} to avoid recursive directory cycles.".format(
+                        name=file_label(child)
+                    )
+                )
+                continue
             if child.is_dir():
                 if not recursive_directories:
                     progress_reporter.persist(
@@ -81,14 +102,23 @@ class SourceRegistry:
             if adapter is None:
                 progress_reporter.persist("Skipping unsupported file {name}.".format(name=file_label(child)))
                 continue
-            documents.append(
-                self._load_file(
-                    child,
-                    progress_reporter,
-                    adapter=adapter,
-                    image_analyzer=image_analyzer,
+
+            try:
+                documents.append(
+                    self._load_file(
+                        child,
+                        progress_reporter,
+                        adapter=adapter,
+                        image_analyzer=image_analyzer,
+                    )
                 )
-            )
+            except _RECOVERABLE_LOAD_ERRORS as error:
+                progress_reporter.persist(
+                    "Warning for {name}: Skipped unreadable source file: {error}".format(
+                        name=file_label(child),
+                        error=error,
+                    )
+                )
         return documents
 
     def _load_file(

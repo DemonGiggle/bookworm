@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import codecs
 from pathlib import Path
 from typing import Optional
 
@@ -117,7 +118,8 @@ def _looks_like_utf8_text(path: Path, sample_size: int = 8192) -> bool:
     if b"\x00" in sample:
         return False
     try:
-        sample.decode("utf-8")
+        decoder = codecs.getincrementaldecoder("utf-8")()
+        decoder.decode(sample, final=False)
     except UnicodeDecodeError:
         return False
     return True
