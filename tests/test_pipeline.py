@@ -559,6 +559,54 @@ def test_document_digester_rejects_low_quality_finalized_topics(tmp_path: Path) 
         ).digest_paths([input_path], tmp_path / "out")
 
 
+def test_topic_digest_merge_dedupes_repeated_summary_paragraphs() -> None:
+    topic = TopicDigest(
+        slug="overview",
+        title="Overview",
+        routing_description="Use this skill when reviewing the overview.",
+        summary=(
+            "First paragraph keeps the durable workflow context.\n\n"
+            "Second paragraph preserves the ordered validation steps."
+        ),
+    )
+
+    topic.merge(
+        TopicDigest(
+            slug="overview",
+            title="Overview",
+            summary=(
+                "Second paragraph preserves the ordered validation steps.\n\n"
+                "Third paragraph adds the rollback note."
+            ),
+        )
+    )
+
+    assert topic.summary == (
+        "First paragraph keeps the durable workflow context.\n\n"
+        "Second paragraph preserves the ordered validation steps.\n\n"
+        "Third paragraph adds the rollback note."
+    )
+
+
+def test_topic_digest_merge_prefers_richer_overlapping_summary_paragraph() -> None:
+    topic = TopicDigest(
+        slug="overview",
+        title="Overview",
+        routing_description="Use this skill when reviewing the overview.",
+        summary="Keep the setup order.",
+    )
+
+    topic.merge(
+        TopicDigest(
+            slug="overview",
+            title="Overview",
+            summary="Keep the setup order and validate each checkpoint before moving on.",
+        )
+    )
+
+    assert topic.summary == "Keep the setup order and validate each checkpoint before moving on."
+
+
 class ImageEchoProvider(LLMProvider):
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         chunks = list(request.chunk_batch)

@@ -43,6 +43,55 @@ def _merge_prefer_richer_text(current: str, update: str) -> str:
     return current
 
 
+def _normalize_summary_paragraph(text: str) -> str:
+    return " ".join(text.strip().rstrip(".!?").lower().split())
+
+
+def _summary_paragraphs(text: str) -> List[str]:
+    paragraphs: List[str] = []
+    current_lines: List[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            if current_lines:
+                paragraphs.append("\n".join(current_lines).strip())
+                current_lines = []
+            continue
+        current_lines.append(line.rstrip())
+    if current_lines:
+        paragraphs.append("\n".join(current_lines).strip())
+    return [paragraph for paragraph in paragraphs if paragraph]
+
+
+def _merge_summary_text(current: str, update: str) -> str:
+    current = current.strip()
+    update = update.strip()
+    if not update:
+        return current
+    if not current:
+        return update
+
+    merged = _summary_paragraphs(current)
+    for candidate in _summary_paragraphs(update):
+        normalized_candidate = _normalize_summary_paragraph(candidate)
+        replaced = False
+        for index, existing in enumerate(merged):
+            normalized_existing = _normalize_summary_paragraph(existing)
+            if normalized_existing == normalized_candidate:
+                replaced = True
+                break
+            if normalized_existing and normalized_existing in normalized_candidate:
+                merged[index] = candidate
+                replaced = True
+                break
+            if normalized_candidate and normalized_candidate in normalized_existing:
+                replaced = True
+                break
+        if not replaced:
+            merged.append(candidate)
+    return "\n\n".join(merged).strip()
+
+
 def _word_count(text: str) -> int:
     return len(text.split())
 
@@ -138,13 +187,7 @@ class TopicDigest:
             other.routing_description,
         )
         if other.summary:
-            if self.summary:
-                self.summary = "{current}\n\n{update}".format(
-                    current=self.summary.strip(),
-                    update=other.summary.strip(),
-                ).strip()
-            else:
-                self.summary = other.summary.strip()
+            self.summary = _merge_summary_text(self.summary, other.summary)
         self.key_points = _dedupe_preserve_order(self.key_points + other.key_points)
         self.workflow_notes = _dedupe_preserve_order(self.workflow_notes + other.workflow_notes)
         self.references = _dedupe_source_refs(self.references + other.references)
