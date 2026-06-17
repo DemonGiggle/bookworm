@@ -588,6 +588,7 @@ def test_cli_creates_configured_image_analyzer(monkeypatch, tmp_path: Path, caps
     def fake_create_image_analyzer(settings):
         seen["analyzer_kind"] = settings.analyzer_kind
         seen["model"] = settings.model
+        seen["temperature"] = settings.temperature
         return MockImageAnalyzer(model=settings.model)
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -616,6 +617,7 @@ def test_cli_creates_configured_image_analyzer(monkeypatch, tmp_path: Path, caps
     assert seen == {
         "analyzer_kind": "mock-image",
         "model": "fake-vision",
+        "temperature": 0.0,
     }
     assert "Using image analyzer mock-image with model fake-vision." in captured.err
 
@@ -678,6 +680,7 @@ def test_cli_configures_ollama_image_analyzer_without_api_key(monkeypatch, tmp_p
         seen["ollama_host"] = settings.ollama_host
         seen["ollama_port"] = settings.ollama_port
         seen["timeout_seconds"] = settings.timeout_seconds
+        seen["temperature"] = settings.temperature
         return MockImageAnalyzer(model=settings.model)
 
     monkeypatch.setattr(cli, "create_provider", lambda settings: CliFakeProvider())
@@ -703,6 +706,8 @@ def test_cli_configures_ollama_image_analyzer_without_api_key(monkeypatch, tmp_p
             "11435",
             "--timeout-sc",
             "60",
+            "--image-temperature",
+            "0.2",
         ]
     )
 
@@ -715,5 +720,43 @@ def test_cli_configures_ollama_image_analyzer_without_api_key(monkeypatch, tmp_p
         "ollama_host": "192.168.1.20",
         "ollama_port": 11435,
         "timeout_seconds": 60,
+        "temperature": 0.2,
     }
     assert "Using image analyzer ollama with model gemma3:4b." in captured.err
+
+
+def test_cli_passes_stage_specific_provider_temperatures(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "artifacts"
+    seen = {}
+    monkeypatch.setenv("OPENAI_API_KEY", "fake-key")
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["digest_temperature"] = settings.digest_temperature
+        seen["finalize_temperature"] = settings.finalize_temperature
+        return CliFakeProvider()
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(output_dir),
+            "--model",
+            "fake-model",
+            "--digest-temperature",
+            "0.6",
+            "--finalize-temperature",
+            "0.2",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen == {
+        "digest_temperature": 0.6,
+        "finalize_temperature": 0.2,
+    }

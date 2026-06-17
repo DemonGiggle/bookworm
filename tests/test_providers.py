@@ -81,6 +81,23 @@ def test_create_provider_passes_ollama_timeout() -> None:
     assert provider.timeout_seconds == 600
 
 
+def test_create_provider_passes_stage_specific_temperatures() -> None:
+    provider = create_provider(
+        ProviderSettings(
+            provider_kind="openai-compatible",
+            model="local-model",
+            api_key="test-key",
+            base_url="http://127.0.0.1:9000/v1",
+            digest_temperature=0.55,
+            finalize_temperature=0.15,
+        )
+    )
+
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.digest_temperature == 0.55
+    assert provider.finalize_temperature == 0.15
+
+
 def test_normalize_base_url_preserves_scheme_and_default_port() -> None:
     assert _normalize_base_url("127.0.0.1", 11434) == "http://127.0.0.1:11434"
     assert _normalize_base_url("http://10.0.0.8", 11434) == "http://10.0.0.8:11434"
@@ -201,6 +218,77 @@ def test_ollama_provider_digest_batch(monkeypatch) -> None:
         == "Use this skill when reviewing the locally digested overview."
     )
     assert decision.topic_updates[0].workflow_notes == ["Validate the local model output before reuse."]
+
+
+def test_ollama_provider_uses_stage_specific_temperatures(monkeypatch) -> None:
+    provider = OllamaProvider(
+        model="llama3.1",
+        digest_temperature=0.45,
+        finalize_temperature=0.05,
+    )
+    captured_payloads = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            payload = (
+                {
+                    "topic_updates": [],
+                    "should_continue": False,
+                    "rationale": "Enough evidence collected.",
+                }
+                if len(captured_payloads) == 1
+                else {
+                    "topics": [
+                        {
+                            "slug": "overview",
+                            "title": "Overview",
+                            "routing_description": "Use this skill when reviewing the finalized overview guidance.",
+                            "summary": "Summary.",
+                            "key_points": ["Point"],
+                            "workflow_notes": ["Note"],
+                            "references": [],
+                        }
+                    ]
+                }
+            )
+            return json.dumps({"message": {"content": json.dumps(payload)}}).encode("utf-8")
+
+    def fake_urlopen(request):
+        captured_payloads.append(json.loads(request.data.decode("utf-8")))
+        return FakeResponse()
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", fake_urlopen)
+    provider.digest_batch(
+        DigestBatchRequest(
+            config=DigestConfig(),
+            batch_number=1,
+            total_batches=1,
+            chunk_batch=[],
+            current_topics=[],
+        )
+    )
+    provider.finalize_topics(
+        [
+            TopicDigest(
+                slug="overview",
+                title="Overview",
+                routing_description="Use this skill when reviewing the finalized overview guidance.",
+                summary="Summary.",
+                key_points=["Point"],
+                workflow_notes=["Note"],
+                references=[],
+            )
+        ]
+    )
+
+    assert captured_payloads[0]["options"]["temperature"] == 0.45
+    assert captured_payloads[1]["options"]["temperature"] == 0.05
 
 
 def test_ollama_provider_reports_connection_failure(monkeypatch) -> None:
@@ -581,6 +669,76 @@ def test_openai_provider_double_verbose_logging_keeps_full_body(monkeypatch) -> 
     assert any("request body" in message for message in verbose_messages)
     assert any(user_prompt in message for message in verbose_messages)
     assert not any("[omitted" in message for message in verbose_messages if "request body" in message)
+
+
+def test_openai_provider_uses_stage_specific_temperatures(monkeypatch) -> None:
+    provider = OpenAIProvider(
+        model="gpt-5-nano",
+        api_key="test-key",
+        digest_temperature=0.5,
+        finalize_temperature=0.2,
+    )
+    captured_calls = []
+
+    def fake_create(**kwargs):
+        captured_calls.append(kwargs)
+        payload = (
+            {
+                "topic_updates": [],
+                "should_continue": False,
+                "rationale": "Enough context collected.",
+            }
+            if len(captured_calls) == 1
+            else {
+                "topics": [
+                    {
+                        "slug": "overview",
+                        "title": "Overview",
+                        "routing_description": "Use this skill when reviewing finalized guidance.",
+                        "summary": "Summary.",
+                        "key_points": ["Point"],
+                        "workflow_notes": ["Note"],
+                        "references": [],
+                    }
+                ]
+            }
+        )
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))]
+        )
+
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=fake_create)
+        )
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+
+    provider.digest_batch(
+        DigestBatchRequest(
+            config=DigestConfig(),
+            batch_number=1,
+            total_batches=1,
+            chunk_batch=[],
+            current_topics=[],
+        )
+    )
+    provider.finalize_topics(
+        [
+            TopicDigest(
+                slug="overview",
+                title="Overview",
+                routing_description="Use this skill when reviewing finalized guidance.",
+                summary="Summary.",
+                key_points=["Point"],
+                workflow_notes=["Note"],
+                references=[],
+            )
+        ]
+    )
+
+    assert captured_calls[0]["temperature"] == 0.5
+    assert captured_calls[1]["temperature"] == 0.2
 
 
 def test_openai_provider_reports_invalid_json_with_context(monkeypatch) -> None:

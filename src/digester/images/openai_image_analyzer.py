@@ -66,9 +66,11 @@ class OpenAIImageAnalyzer(ImageAnalyzer):
         api_key: str,
         base_url: Optional[str] = None,
         organization: Optional[str] = None,
+        temperature: float = 0.0,
     ) -> None:
         super().__init__()
         self.model = model
+        self.temperature = temperature
         self._client_provider = OpenAIProvider(
             model=model,
             api_key=api_key,
@@ -102,6 +104,7 @@ class OpenAIImageAnalyzer(ImageAnalyzer):
                         ],
                     },
                 ],
+                temperature=self.temperature,
                 response_format={"type": "json_object"},
             )
         except Exception as error:

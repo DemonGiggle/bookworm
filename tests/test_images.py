@@ -58,6 +58,19 @@ def test_create_image_analyzer_builds_ollama_image_analyzer() -> None:
     assert analyzer.timeout_seconds == 30
 
 
+def test_create_image_analyzer_passes_temperature() -> None:
+    analyzer = create_image_analyzer(
+        ImageAnalyzerSettings(
+            analyzer_kind="ollama",
+            model="gemma3:4b",
+            temperature=0.25,
+        )
+    )
+
+    assert isinstance(analyzer, OllamaImageAnalyzer)
+    assert analyzer.temperature == 0.25
+
+
 def test_mock_image_analyzer_preserves_caption_and_context() -> None:
     analyzer = MockImageAnalyzer(model="fake-vision")
 
@@ -134,6 +147,7 @@ def test_ollama_image_analyzer_sends_base64_image_and_parses_analysis(monkeypatc
     assert captured["payload"]["model"] == "gemma3:4b"
     assert captured["payload"]["stream"] is False
     assert captured["payload"]["format"] == "json"
+    assert captured["payload"]["options"]["temperature"] == 0.0
     assert captured["payload"]["messages"][1]["images"] == ["aW1hZ2UtYnl0ZXM="]
     assert result.summary == "The screenshot shows a confirmation dialog."
     assert result.key_points == ["The highlighted button is Continue."]

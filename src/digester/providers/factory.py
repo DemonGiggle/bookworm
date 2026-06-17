@@ -20,6 +20,8 @@ class ProviderSettings:
     ollama_host: str = "127.0.0.1"
     ollama_port: int = 11434
     timeout_seconds: Optional[int] = None
+    digest_temperature: float = 0.4
+    finalize_temperature: float = 0.1
 
 
 def create_provider(settings: ProviderSettings) -> LLMProvider:
@@ -28,12 +30,16 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             model=settings.model,
             api_key=settings.api_key,
             organization=settings.organization,
+            digest_temperature=settings.digest_temperature,
+            finalize_temperature=settings.finalize_temperature,
         )
     if settings.provider_kind == "openai-compatible":
         return OpenAICompatibleProvider(
             model=settings.model,
             api_key=settings.api_key,
             base_url=settings.base_url or "",
+            digest_temperature=settings.digest_temperature,
+            finalize_temperature=settings.finalize_temperature,
         )
     if settings.provider_kind == "ollama":
         return OllamaProvider(
@@ -41,6 +47,8 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             host=settings.ollama_host,
             port=settings.ollama_port,
             timeout_seconds=settings.timeout_seconds,
+            digest_temperature=settings.digest_temperature,
+            finalize_temperature=settings.finalize_temperature,
         )
     if settings.provider_kind == "mock-llm":
         return MockLLMProvider(model=settings.model)

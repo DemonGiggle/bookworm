@@ -42,6 +42,8 @@ class OllamaProvider(LLMProvider):
         host: str = "127.0.0.1",
         port: int = 11434,
         timeout_seconds: Optional[int] = None,
+        digest_temperature: float = 0.4,
+        finalize_temperature: float = 0.1,
     ) -> None:
         super().__init__()
         self.model = model
@@ -49,15 +51,17 @@ class OllamaProvider(LLMProvider):
         self.port = port
         self.timeout_seconds = timeout_seconds
         self.base_url = _normalize_base_url(host=host, port=port)
+        self.digest_temperature = digest_temperature
+        self.finalize_temperature = finalize_temperature
 
-    def _request_content(self, system_prompt: str, user_prompt: str) -> str:
+    def _request_content(self, system_prompt: str, user_prompt: str, temperature: float) -> str:
         self._log_request("Ollama", self.model, system_prompt, user_prompt)
         payload = json.dumps(
             {
                 "model": self.model,
                 "stream": False,
                 "format": "json",
-                "options": {"temperature": 0},
+                "options": {"temperature": temperature},
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -114,8 +118,13 @@ class OllamaProvider(LLMProvider):
         system_prompt: str,
         user_prompt: str,
         retry_example_payload: Optional[Dict[str, object]] = None,
+        temperature: float = 0,
     ) -> Dict[str, object]:
-        content = self._request_content(system_prompt=system_prompt, user_prompt=user_prompt)
+        content = self._request_content(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+        )
         try:
             return self._parse_json_response("Ollama", self.model, content)
         except ValueError as error:
@@ -134,7 +143,11 @@ class OllamaProvider(LLMProvider):
                 system_prompt=system_prompt,
                 example_payload=retry_example_payload,
             )
-        retry_content = self._request_content(system_prompt=retry_system_prompt, user_prompt=user_prompt)
+        retry_content = self._request_content(
+            system_prompt=retry_system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+        )
         return self._parse_json_response("Ollama", self.model, retry_content)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
@@ -162,6 +175,7 @@ class OllamaProvider(LLMProvider):
                 "should_continue": False,
                 "rationale": "Example rationale.",
             },
+            temperature=self.digest_temperature,
         )
         fallback_refs = [chunk.source_ref for chunk in request.chunk_batch]
         return parse_digest_decision(payload, fallback_refs=fallback_refs)
@@ -191,5 +205,6 @@ class OllamaProvider(LLMProvider):
                     }
                 ]
             },
+            temperature=self.finalize_temperature,
         )
         return parse_finalized_topics(payload, fallback_topics=topics)

@@ -19,6 +19,7 @@ class ImageAnalyzerSettings:
     ollama_host: str = "127.0.0.1"
     ollama_port: int = 11434
     timeout_seconds: Optional[int] = None
+    temperature: float = 0.0
 
 
 def create_image_analyzer(settings: ImageAnalyzerSettings) -> ImageAnalyzer:
@@ -27,6 +28,7 @@ def create_image_analyzer(settings: ImageAnalyzerSettings) -> ImageAnalyzer:
             model=settings.model,
             api_key=settings.api_key,
             organization=settings.organization,
+            temperature=settings.temperature,
         )
     if settings.analyzer_kind == "openai-compatible":
         if not settings.base_url:
@@ -36,6 +38,7 @@ def create_image_analyzer(settings: ImageAnalyzerSettings) -> ImageAnalyzer:
             api_key=settings.api_key,
             base_url=settings.base_url,
             organization=settings.organization,
+            temperature=settings.temperature,
         )
     if settings.analyzer_kind == "mock-image":
         return MockImageAnalyzer(model=settings.model)
@@ -45,5 +48,6 @@ def create_image_analyzer(settings: ImageAnalyzerSettings) -> ImageAnalyzer:
             host=settings.ollama_host,
             port=settings.ollama_port,
             timeout_seconds=settings.timeout_seconds,
+            temperature=settings.temperature,
         )
     raise ValueError("Unknown image analyzer kind: {kind}".format(kind=settings.analyzer_kind))
