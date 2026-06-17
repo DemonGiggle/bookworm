@@ -112,7 +112,7 @@ class OpenAIProvider(LLMProvider):
         except Exception as error:
             self._raise_openai_error(error)
 
-    def _complete_json(self, system_prompt: str, user_prompt: str) -> Dict[str, object]:
+    def _request_json_completion(self, system_prompt: str, user_prompt: str) -> str:
         client = self._client()
         self._log_request("OpenAI", self.model, system_prompt, user_prompt)
         started_at = perf_counter()
@@ -131,12 +131,64 @@ class OpenAIProvider(LLMProvider):
         if not content:
             raise ValueError("Model returned an empty response.")
         self._log_response("OpenAI", self.model, content, perf_counter() - started_at)
-        return self._parse_json_response("OpenAI", self.model, content)
+        return content
+
+    def _complete_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        retry_example_payload: Optional[Dict[str, object]] = None,
+    ) -> Dict[str, object]:
+        content = self._request_json_completion(system_prompt=system_prompt, user_prompt=user_prompt)
+        try:
+            return self._parse_json_response("OpenAI", self.model, content)
+        except ValueError as error:
+            if "invalid JSON in the model response" not in str(error):
+                raise
+        self.progress_reporter.verbose(
+            "Verbose: OpenAI returned malformed JSON; retrying once with a stricter JSON-only instruction and a compact schema example."
+        )
+        if retry_example_payload is None:
+            retry_system_prompt = (
+                "{prompt} Return only one complete JSON object with no markdown fences, no commentary, "
+                "and no trailing text. Ensure every key, string, bracket, and brace is fully closed."
+            ).format(prompt=system_prompt)
+        else:
+            retry_system_prompt = self._build_retry_system_prompt(
+                system_prompt=system_prompt,
+                example_payload=retry_example_payload,
+            )
+        retry_content = self._request_json_completion(
+            system_prompt=retry_system_prompt,
+            user_prompt=user_prompt,
+        )
+        return self._parse_json_response("OpenAI", self.model, retry_content)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         payload = self._complete_json(
             system_prompt=build_digest_system_prompt(),
             user_prompt=build_digest_user_prompt(request),
+            retry_example_payload={
+                "topic_updates": [
+                    {
+                        "slug": "example-topic",
+                        "title": "Example Topic",
+                        "routing_description": "Use this skill when reviewing the example workflow.",
+                        "summary": "Summarizes the example workflow and its constraints.",
+                        "key_points": ["Follow the example workflow in order."],
+                        "workflow_notes": ["Validate the example output before reuse."],
+                        "references": [
+                            {
+                                "source_id": "example-source",
+                                "source_path": "/tmp/example-source.txt",
+                                "locator": "section 1",
+                            }
+                        ],
+                    }
+                ],
+                "should_continue": False,
+                "rationale": "Example rationale.",
+            },
         )
         fallback_refs = [chunk.source_ref for chunk in request.chunk_batch]
         return parse_digest_decision(payload, fallback_refs=fallback_refs)
@@ -147,5 +199,24 @@ class OpenAIProvider(LLMProvider):
         payload = self._complete_json(
             system_prompt=build_finalize_system_prompt(),
             user_prompt=build_finalize_user_prompt(topics),
+            retry_example_payload={
+                "topics": [
+                    {
+                        "slug": "example-topic",
+                        "title": "Example Topic",
+                        "routing_description": "Use this skill when reviewing the finalized example workflow.",
+                        "summary": "Summarizes the finalized example workflow and its constraints.",
+                        "key_points": ["Follow the finalized example workflow in order."],
+                        "workflow_notes": ["Validate the finalized example output before reuse."],
+                        "references": [
+                            {
+                                "source_id": "example-source",
+                                "source_path": "/tmp/example-source.txt",
+                                "locator": "section 1",
+                            }
+                        ],
+                    }
+                ]
+            },
         )
         return parse_finalized_topics(payload, fallback_topics=topics)
