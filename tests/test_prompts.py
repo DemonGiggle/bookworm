@@ -8,6 +8,7 @@ from digester.core.prompts import (
     build_finalize_system_prompt,
     build_finalize_user_prompt,
 )
+from digester.images.openai_image_analyzer import _build_image_system_prompt
 
 
 def test_digest_prompts_preserve_setup_and_hardware_detail() -> None:
@@ -39,14 +40,17 @@ def test_digest_prompts_preserve_setup_and_hardware_detail() -> None:
     assert "Codex, Claude Code, and Copilot" in system_prompt
     assert "SKILL.md description" in system_prompt
     assert "routing_description" in system_prompt
+    assert "when_to_use may be used as an alias" in system_prompt
     assert "workflow_notes" in system_prompt
+    assert 'bad="Python web framework"' in system_prompt
+    assert 'good="Use this skill when setting up Flask middleware or debugging request routing."' in system_prompt
+    assert "When uncertain, prefer should_continue=true" in system_prompt
     assert "setup sequences" in user_prompt
     assert "verification steps" in user_prompt
-    assert "5-12 bullets" in user_prompt
     assert "active topics in view" in user_prompt
-    assert "routing_description must say when another agent should load the skill" in user_prompt
     assert "operational rules" in user_prompt
-    assert "later chunks may contain different topics" in user_prompt
+    assert "expand it with concrete evidence from this batch" in user_prompt
+    assert "mostly pivoting into different topics" in user_prompt
 
 
 def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
@@ -74,8 +78,11 @@ def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
     assert "hardware setup flows" in system_prompt
     assert "routing_description" in system_prompt
     assert "workflow_notes" in system_prompt
+    assert "when_to_use may be used as an alias" in system_prompt
+    assert 'good="Use this skill when setting up Flask middleware or debugging request routing."' in system_prompt
     assert "Expand weak summaries" in user_prompt
     assert "Make routing_description strong enough" in user_prompt
+    assert "workflow_notes with 3-8 grounded notes" in user_prompt
     assert "setup flow, operational nuance, and important edge cases" in user_prompt
     assert '"source_id": "setup-guide"' in user_prompt
     assert '"source_path": "/tmp/setup-guide.txt"' in user_prompt
@@ -88,3 +95,13 @@ def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
             "locator": "section 2",
         }
     ]
+
+
+def test_image_prompt_requests_type_specific_grounded_detail() -> None:
+    system_prompt = _build_image_system_prompt()
+
+    assert "diagram or flowchart" in system_prompt
+    assert "UI screenshot" in system_prompt
+    assert "table or chart" in system_prompt
+    assert "photo" in system_prompt
+    assert "Do not invent unreadable details." in system_prompt

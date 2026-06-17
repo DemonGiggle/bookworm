@@ -16,6 +16,10 @@ def _build_image_system_prompt() -> str:
         "Return strict JSON with keys: summary, key_points. "
         "Describe only details that are visible in the image or grounded by the supplied nearby document context. "
         "Preserve operationally useful information such as UI text, commands, diagrams, labels, configuration values, warnings, or workflow order when present. "
+        "If the image is a diagram or flowchart, describe the named nodes, edges, and sequence. "
+        "If it is a UI screenshot, describe visible controls, labels, status text, and notable layout cues. "
+        "If it is a table or chart, summarize the key values, headings, and visible patterns. "
+        "If it is a photo, describe only the visible objects or states that matter to the surrounding document. "
         "Do not invent unreadable details."
     )
 
