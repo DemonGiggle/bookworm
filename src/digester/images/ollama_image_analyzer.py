@@ -30,12 +30,14 @@ class OllamaImageAnalyzer(ImageAnalyzer):
         host: str = "127.0.0.1",
         port: int = 11434,
         timeout_seconds: Optional[int] = None,
+        temperature: float = 0.0,
     ) -> None:
         super().__init__()
         self.model = model
         self.host = host
         self.port = port
         self.timeout_seconds = timeout_seconds
+        self.temperature = temperature
         self.base_url = _normalize_base_url(host=host, port=port)
         self._log_helper = _ImageLogHelper()
 
@@ -65,7 +67,7 @@ class OllamaImageAnalyzer(ImageAnalyzer):
                 "model": self.model,
                 "stream": False,
                 "format": "json",
-                "options": {"temperature": 0},
+                "options": {"temperature": self.temperature},
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {

@@ -96,6 +96,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional request timeout in seconds for Ollama requests. Defaults to no timeout.",
     )
+    digest_parser.add_argument(
+        "--digest-temperature",
+        type=float,
+        default=float(os.getenv("BOOKWORM_DIGEST_TEMPERATURE", "0.4")),
+        help="Sampling temperature for digest-stage text generation.",
+    )
+    digest_parser.add_argument(
+        "--finalize-temperature",
+        type=float,
+        default=float(os.getenv("BOOKWORM_FINALIZE_TEMPERATURE", "0.1")),
+        help="Sampling temperature for finalize-stage text generation.",
+    )
+    digest_parser.add_argument(
+        "--image-temperature",
+        type=float,
+        default=float(os.getenv("BOOKWORM_IMAGE_TEMPERATURE", "0.0")),
+        help="Sampling temperature for image-analysis generation.",
+    )
     digest_parser.add_argument("--max-chunk-chars", type=int, default=1800)
     digest_parser.add_argument("--batch-size", type=int, default=2)
     digest_parser.add_argument("--minimum-batches-before-stop", type=int, default=2)
@@ -207,6 +225,7 @@ def _resolve_image_analyzer(args: argparse.Namespace) -> Optional[ImageAnalyzer]
             ollama_host=args.ollama_host,
             ollama_port=args.ollama_port,
             timeout_seconds=args.timeout_sc,
+            temperature=args.image_temperature,
         )
     )
 
@@ -271,6 +290,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 ollama_host=args.ollama_host,
                 ollama_port=args.ollama_port,
                 timeout_seconds=args.timeout_sc,
+                digest_temperature=args.digest_temperature,
+                finalize_temperature=args.finalize_temperature,
             )
         )
         image_analyzer = _resolve_image_analyzer(args)

@@ -22,6 +22,8 @@ class OpenAIProvider(LLMProvider):
         api_key: str,
         base_url: Optional[str] = None,
         organization: Optional[str] = None,
+        digest_temperature: float = 0.4,
+        finalize_temperature: float = 0.1,
     ) -> None:
         super().__init__()
         if not api_key:
@@ -30,6 +32,8 @@ class OpenAIProvider(LLMProvider):
         self.api_key = api_key
         self.base_url = base_url
         self.organization = organization
+        self.digest_temperature = digest_temperature
+        self.finalize_temperature = finalize_temperature
 
     def _client(self):
         from openai import OpenAI
@@ -112,7 +116,7 @@ class OpenAIProvider(LLMProvider):
         except Exception as error:
             self._raise_openai_error(error)
 
-    def _request_json_completion(self, system_prompt: str, user_prompt: str) -> str:
+    def _request_json_completion(self, system_prompt: str, user_prompt: str, temperature: float) -> str:
         client = self._client()
         self._log_request("OpenAI", self.model, system_prompt, user_prompt)
         started_at = perf_counter()
@@ -123,6 +127,7 @@ class OpenAIProvider(LLMProvider):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
+                temperature=temperature,
                 response_format={"type": "json_object"},
             )
         except Exception as error:
@@ -138,8 +143,13 @@ class OpenAIProvider(LLMProvider):
         system_prompt: str,
         user_prompt: str,
         retry_example_payload: Optional[Dict[str, object]] = None,
+        temperature: float = 0,
     ) -> Dict[str, object]:
-        content = self._request_json_completion(system_prompt=system_prompt, user_prompt=user_prompt)
+        content = self._request_json_completion(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+        )
         try:
             return self._parse_json_response("OpenAI", self.model, content)
         except ValueError as error:
@@ -161,6 +171,7 @@ class OpenAIProvider(LLMProvider):
         retry_content = self._request_json_completion(
             system_prompt=retry_system_prompt,
             user_prompt=user_prompt,
+            temperature=temperature,
         )
         return self._parse_json_response("OpenAI", self.model, retry_content)
 
@@ -189,6 +200,7 @@ class OpenAIProvider(LLMProvider):
                 "should_continue": False,
                 "rationale": "Example rationale.",
             },
+            temperature=self.digest_temperature,
         )
         fallback_refs = [chunk.source_ref for chunk in request.chunk_batch]
         return parse_digest_decision(payload, fallback_refs=fallback_refs)
@@ -218,5 +230,6 @@ class OpenAIProvider(LLMProvider):
                     }
                 ]
             },
+            temperature=self.finalize_temperature,
         )
         return parse_finalized_topics(payload, fallback_topics=topics)
