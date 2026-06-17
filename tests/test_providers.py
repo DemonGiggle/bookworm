@@ -615,6 +615,53 @@ def test_openai_provider_reports_invalid_json_with_context(monkeypatch) -> None:
     assert '<<<HERE>>>"<<<HERE>>>rationale' in message
 
 
+def test_openai_provider_retries_invalid_json_with_schema_example(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    reporter = RecordingVerboseReporter()
+    provider.set_progress_reporter(reporter)
+    invalid_content = '{"topic_updates": [], "should_continue": false "rationale": "broken"}'
+    valid_content = json.dumps(
+        {
+            "topic_updates": [],
+            "should_continue": False,
+            "rationale": "Recovered on retry.",
+        }
+    )
+    captured_calls = []
+
+    def fake_create(**kwargs):
+        captured_calls.append(kwargs)
+        content = invalid_content if len(captured_calls) == 1 else valid_content
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+        )
+
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=fake_create)
+        )
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+
+    decision = provider.digest_batch(
+        DigestBatchRequest(
+            config=DigestConfig(),
+            batch_number=1,
+            total_batches=1,
+            chunk_batch=[],
+            current_topics=[],
+        )
+    )
+
+    verbose_messages = [message for kind, message in reporter.messages if kind == "verbose"]
+    assert decision.rationale == "Recovered on retry."
+    assert len(captured_calls) == 2
+    retry_system_prompt = captured_calls[1]["messages"][0]["content"]
+    assert "Follow this exact JSON shape example:" in retry_system_prompt
+    assert '"topic_updates":[{' in retry_system_prompt
+    assert any("retrying once with a stricter JSON-only instruction and a compact schema example" in message for message in verbose_messages)
+
+
 def test_ollama_provider_reports_invalid_model_json_with_context(monkeypatch) -> None:
     provider = OllamaProvider(model="llama3.1")
     invalid_content = '{"topic_updates": [], "should_continue": false "rationale": "broken"}'
@@ -655,6 +702,60 @@ def test_ollama_provider_reports_invalid_model_json_with_context(monkeypatch) ->
     assert "Expecting ',' delimiter" in message
     assert "Received 69 chars." in message
     assert '<<<HERE>>>"<<<HERE>>>rationale' in message
+
+
+def test_ollama_provider_retries_invalid_json_with_schema_example(monkeypatch) -> None:
+    provider = OllamaProvider(model="llama3.1")
+    reporter = RecordingVerboseReporter()
+    provider.set_progress_reporter(reporter)
+    invalid_content = '{"topic_updates": [], "should_continue": false "rationale": "broken"}'
+    valid_content = json.dumps(
+        {
+            "topic_updates": [],
+            "should_continue": False,
+            "rationale": "Recovered on retry.",
+        }
+    )
+    captured_requests = []
+
+    class FakeResponse:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps({"message": {"content": self.content}}).encode("utf-8")
+
+    responses = iter([invalid_content, valid_content])
+
+    def fake_urlopen(request):
+        captured_requests.append(json.loads(request.data.decode("utf-8")))
+        return FakeResponse(next(responses))
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", fake_urlopen)
+
+    decision = provider.digest_batch(
+        DigestBatchRequest(
+            config=DigestConfig(),
+            batch_number=1,
+            total_batches=1,
+            chunk_batch=[],
+            current_topics=[],
+        )
+    )
+
+    verbose_messages = [message for kind, message in reporter.messages if kind == "verbose"]
+    assert decision.rationale == "Recovered on retry."
+    assert len(captured_requests) == 2
+    retry_system_prompt = captured_requests[1]["messages"][0]["content"]
+    assert "Follow this exact JSON shape example:" in retry_system_prompt
+    assert '"topic_updates":[{' in retry_system_prompt
+    assert any("retrying once with a stricter JSON-only instruction and a compact schema example" in message for message in verbose_messages)
 
 
 def test_ollama_provider_reports_invalid_http_body_with_context(monkeypatch) -> None:

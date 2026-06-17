@@ -8,6 +8,10 @@ from ..core.models import DigestBatchRequest, DigestDecision, TopicDigest
 from ..utils.progress import NoOpProgressReporter, ProgressReporter
 
 
+def _compact_json_example(payload: object) -> str:
+    return json.dumps(payload, separators=(",", ":"))
+
+
 def _readable_preview(text: str, head_chars: int = 160, tail_chars: int = 80) -> str:
     if len(text) <= head_chars + tail_chars:
         return text
@@ -188,6 +192,16 @@ class LLMProvider(ABC):
                     guidance=_json_error_guidance(payload_label, error.pos, len(response_text)),
                 )
             ) from error
+
+    def _build_retry_system_prompt(self, system_prompt: str, example_payload: object) -> str:
+        return (
+            "{prompt} Return only one complete JSON object with no markdown fences, no commentary, "
+            "and no trailing text. Ensure every key, string, bracket, and brace is fully closed. "
+            "Follow this exact JSON shape example: {example}"
+        ).format(
+            prompt=system_prompt,
+            example=_compact_json_example(example_payload),
+        )
 
     def validate_configuration(self) -> None:
         return None
