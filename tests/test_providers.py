@@ -427,6 +427,7 @@ def test_create_provider_builds_opencode_go_provider_and_normalizes_model() -> N
     assert provider.digest_temperature == 0.2
     assert provider.finalize_temperature == 0.0
     assert provider.finalize_max_output_tokens == 8192
+    assert provider.finalize_review_passes == 1
 
 
 def test_opencode_go_uses_strict_json_schema_output() -> None:
