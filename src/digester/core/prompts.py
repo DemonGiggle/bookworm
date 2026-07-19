@@ -6,6 +6,11 @@ from typing import Sequence
 from .models import DigestBatchRequest, TopicDigest
 
 
+MAX_FINALIZE_PROMPT_CHARS = 24000
+MAX_FINALIZE_SUMMARY_CHARS = 6000
+MAX_FINALIZE_LIST_CHARS = 5000
+
+
 _TOPIC_OUTPUT_CONTRACT = (
     "Return strict JSON only. "
     "Digest responses must include topic_updates, should_continue, rationale. "
@@ -104,30 +109,90 @@ def build_finalize_system_prompt() -> str:
         f"{_TOPIC_OUTPUT_CONTRACT} "
         f"{_TOPIC_QUALITY_GUIDANCE} "
         f"{_ROUTING_EXAMPLE_GUIDANCE} "
-        "Produce rich markdown-ready summaries that keep the most useful implementation and setup detail. Each topic should read like a reusable skill file for coding agents such as Codex, Claude Code, and Copilot. "
+        "Refine only from the supplied topic data and evidence snippets; do not add facts that are not present. Produce rich markdown-ready summaries that keep the most useful implementation and setup detail. Each topic should read like a reusable skill file for coding agents such as Codex, Claude Code, and Copilot. "
         "Do not collapse away hardware setup flows, ordered procedures, commands, prerequisites, warnings, validation checks, or troubleshooting notes. "
         "Remove duplication, but preserve concrete facts and enough detail that another LLM or engineer could act on the output without rereading the whole source."
     )
 
 
+def _bounded_text_list(items: Sequence[str], max_chars: int) -> Sequence[str]:
+    result = []
+    used = 0
+    for item in items:
+        remaining = max_chars - used
+        if remaining <= 0:
+            break
+        bounded = item[:remaining]
+        if bounded:
+            result.append(bounded)
+            used += len(bounded)
+    return result
+
+
 def build_finalize_user_prompt(topics: Sequence[TopicDigest]) -> str:
+    if len(topics) != 1:
+        raise ValueError("Finalization prompts must contain exactly one topic.")
+    topic = topics[0]
+    if not topic.evidence_chunk_ids:
+        raise ValueError(
+            "Topic '{slug}' cannot be finalized without evidence chunk IDs.".format(
+                slug=topic.slug
+            )
+        )
+    missing_evidence = [
+        chunk_id
+        for chunk_id in topic.evidence_chunk_ids
+        if not topic.evidence_texts.get(chunk_id, "").strip()
+    ]
+    if missing_evidence:
+        raise ValueError(
+            "Topic '{slug}' is missing evidence text for chunks: {ids}.".format(
+                slug=topic.slug,
+                ids=", ".join(missing_evidence),
+            )
+        )
     payload = [
         {
             "slug": topic.slug,
             "title": topic.title,
             "routing_description": topic.routing_description,
-            "summary": topic.summary,
-            "key_points": topic.key_points,
-            "workflow_notes": topic.workflow_notes,
+            "summary": topic.summary[:MAX_FINALIZE_SUMMARY_CHARS],
+            "key_points": _bounded_text_list(topic.key_points, MAX_FINALIZE_LIST_CHARS),
+            "workflow_notes": _bounded_text_list(
+                topic.workflow_notes, MAX_FINALIZE_LIST_CHARS
+            ),
             "reference_chunk_ids": topic.evidence_chunk_ids,
+            "evidence": [],
         }
-        for topic in topics
     ]
-    return (
-        "Finalize these topics for markdown export. Expand weak summaries into more useful detail where the existing topic data supports it. "
+    prefix = (
+        "Finalize this topic for markdown export. Refine weak wording only from the supplied facts and evidence snippets. "
         "Make routing_description strong enough for a frontmatter description and When To Use section. "
         "Make workflow_notes capture validation checks, caveats, and source-backed operating guidance. "
         "Aim for summaries of 2-5 compact paragraphs when the source supports it, key_points with roughly 5-12 concrete items for dense topics, and workflow_notes with 3-8 grounded notes. "
         "Keep the output concise enough for downstream context windows, but detailed enough to preserve setup flow, operational nuance, and important edge cases.\n"
-        "{payload}"
-    ).format(payload=json.dumps(payload, indent=2))
+    )
+    for chunk_id in topic.evidence_chunk_ids:
+        text = topic.evidence_texts.get(chunk_id, "")
+        if not text:
+            continue
+        base_chars = len(prefix) + len(json.dumps(payload, indent=2))
+        remaining = MAX_FINALIZE_PROMPT_CHARS - base_chars - 100
+        if remaining <= 0:
+            break
+        payload[0]["evidence"].append(
+            {"chunk_id": chunk_id, "text": text[:remaining]}
+        )
+    prompt = prefix + json.dumps(payload, indent=2)
+    while len(prompt) > MAX_FINALIZE_PROMPT_CHARS and payload[0]["evidence"]:
+        overflow = len(prompt) - MAX_FINALIZE_PROMPT_CHARS
+        last_evidence = payload[0]["evidence"][-1]
+        last_text = last_evidence["text"]
+        if len(last_text) <= overflow:
+            payload[0]["evidence"].pop()
+        else:
+            last_evidence["text"] = last_text[: len(last_text) - overflow]
+        prompt = prefix + json.dumps(payload, indent=2)
+    if len(prompt) > MAX_FINALIZE_PROMPT_CHARS:
+        raise ValueError("Finalization prompt exceeded its hard character budget.")
+    return prompt

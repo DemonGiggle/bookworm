@@ -182,6 +182,7 @@ class TopicDigest:
     references: List[SourceRef] = field(default_factory=list)
     evidence_chunk_ids: List[str] = field(default_factory=list)
     evidence_refs: Dict[str, SourceRef] = field(default_factory=dict)
+    evidence_texts: Dict[str, str] = field(default_factory=dict, repr=False)
 
     def merge(self, other: "TopicDigest") -> None:
         self.routing_description = _merge_prefer_richer_text(
@@ -197,6 +198,7 @@ class TopicDigest:
             self.evidence_chunk_ids + other.evidence_chunk_ids
         )
         self.evidence_refs.update(other.evidence_refs)
+        self.evidence_texts.update(other.evidence_texts)
 
 
 @dataclass
@@ -233,6 +235,7 @@ class DigestDecision:
         cls,
         payload: Dict[str, object],
         chunk_refs: Dict[str, SourceRef],
+        chunk_texts: Optional[Dict[str, str]] = None,
     ) -> "DigestDecision":
         should_continue = payload.get("should_continue")
         if not isinstance(should_continue, bool):
@@ -271,6 +274,11 @@ class DigestDecision:
                         references=parsed_refs,
                         evidence_chunk_ids=chunk_ids,
                         evidence_refs={chunk_id: chunk_refs[chunk_id] for chunk_id in chunk_ids},
+                        evidence_texts={
+                            chunk_id: (chunk_texts or {}).get(chunk_id, "")
+                            for chunk_id in chunk_ids
+                            if (chunk_texts or {}).get(chunk_id, "")
+                        },
                     )
                 )
         return cls(

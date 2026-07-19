@@ -8,8 +8,13 @@ from ..core.models import DigestDecision, SourceRef, TopicDigest, coerce_text_li
 def parse_digest_decision(
     payload: Dict[str, object],
     chunk_refs: Mapping[str, SourceRef],
+    chunk_texts: Optional[Mapping[str, str]] = None,
 ) -> DigestDecision:
-    return DigestDecision.from_payload(payload, chunk_refs=dict(chunk_refs))
+    return DigestDecision.from_payload(
+        payload,
+        chunk_refs=dict(chunk_refs),
+        chunk_texts=dict(chunk_texts or {}),
+    )
 
 
 def _parse_source_refs(raw_refs: object) -> List[SourceRef]:
@@ -93,6 +98,12 @@ def parse_finalized_topics(
                     chunk_id: evidence_refs[chunk_id]
                     for chunk_id in chunk_ids
                     if chunk_id in evidence_refs
+                },
+                evidence_texts={
+                    chunk_id: fallback_topic.evidence_texts[chunk_id]
+                    for chunk_id in chunk_ids
+                    if fallback_topic is not None
+                    and chunk_id in fallback_topic.evidence_texts
                 },
             )
         )
