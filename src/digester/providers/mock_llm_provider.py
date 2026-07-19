@@ -59,8 +59,12 @@ class MockLLMProvider(LLMProvider):
 
         grouped_refs: Dict[Tuple[str, str], List[SourceRef]] = {}
         grouped_seen: Dict[Tuple[str, str], Set[Tuple[str, str, str]]] = {}
+        grouped_chunk_ids: Dict[Tuple[str, str], List[str]] = {}
+        grouped_evidence_refs: Dict[Tuple[str, str], Dict[str, SourceRef]] = {}
         for chunk in request.chunk_batch:
             key = (chunk.source_id, chunk.source_path)
+            grouped_chunk_ids.setdefault(key, []).append(chunk.chunk_id)
+            grouped_evidence_refs.setdefault(key, {})[chunk.chunk_id] = chunk.source_ref
             refs = grouped_refs.setdefault(key, [])
             seen = grouped_seen.setdefault(key, set())
             ref_key = (
@@ -98,6 +102,8 @@ class MockLLMProvider(LLMProvider):
                         "Use the preserved source references when comparing mock output to a real skill export.",
                     ],
                     references=grouped_refs[(source_id, source_path)],
+                    evidence_chunk_ids=grouped_chunk_ids[(source_id, source_path)],
+                    evidence_refs=grouped_evidence_refs[(source_id, source_path)],
                 )
             )
 

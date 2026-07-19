@@ -10,8 +10,8 @@ _TOPIC_OUTPUT_CONTRACT = (
     "Return strict JSON only. "
     "Digest responses must include topic_updates, should_continue, rationale. "
     "Finalize responses must include topics. "
-    "Each topic object must include slug, title, routing_description, summary, key_points, workflow_notes, references. "
-    "references entries must contain source_id, source_path, locator. "
+    "Each topic object must include slug, title, routing_description, summary, key_points, workflow_notes, reference_chunk_ids. "
+    "reference_chunk_ids must contain only chunk_id values supplied in the prompt that directly support the topic. Never copy paths or invent chunk IDs. "
     "routing_description must be a concrete when-to-use sentence for another agent; if needed, when_to_use may be used as an alias for routing_description. "
     "summary should usually be 2-5 compact paragraphs when the source supports it. "
     "key_points should usually contain 5-12 concrete bullet-style items for dense material. "
@@ -31,19 +31,8 @@ _TOPIC_QUALITY_GUIDANCE = (
 _ROUTING_EXAMPLE_GUIDANCE = (
     'Example routing_description values: bad="Python web framework"; '
     'good="Use this skill when setting up Flask middleware or debugging request routing." '
-    'Good topic objects contain realistic summaries, concrete key_points, and grounded references instead of placeholder labels.'
+    'Good topic objects contain realistic summaries, concrete key_points, and grounded reference_chunk_ids instead of placeholder labels.'
 )
-
-
-def _source_ref_payload(topic: TopicDigest):
-    return [
-        {
-            "source_id": ref.source_id,
-            "source_path": ref.source_path,
-            "locator": ref.locator,
-        }
-        for ref in topic.references
-    ]
 
 
 def build_digest_system_prompt() -> str:
@@ -72,7 +61,6 @@ def build_digest_user_prompt(request: DigestBatchRequest) -> str:
             "summary": topic.summary,
             "key_points": topic.key_points,
             "workflow_notes": topic.workflow_notes,
-            "references": _source_ref_payload(topic),
         }
         for topic in request.current_topics
     ]
@@ -97,6 +85,7 @@ def build_digest_user_prompt(request: DigestBatchRequest) -> str:
         "- Preserve setup sequences, hardware steps, prerequisites, commands, parameter values, safety notes, verification steps, and troubleshooting clues when present.\n"
         "- Prefer operational rules, workflow steps, constraints, examples, commands, validation checks, and failure modes over generic observations.\n"
         "- Merge overlapping ideas instead of creating duplicates.\n"
+        "- Return only chunk_id values from New chunks in this batch; use an empty list when no new chunk directly supports a topic. Existing evidence is retained by the application.\n"
         "- Favor detail that helps another engineer or agent reproduce the setup, understand the implementation, or avoid mistakes.\n"
         "- If a candidate topic is still thin, expand it with concrete evidence from this batch instead of returning a placeholder.\n"
         "- Use should_continue=false when the visible topics look complete and this batch is mostly pivoting into different topics; otherwise prefer true."
@@ -130,7 +119,7 @@ def build_finalize_user_prompt(topics: Sequence[TopicDigest]) -> str:
             "summary": topic.summary,
             "key_points": topic.key_points,
             "workflow_notes": topic.workflow_notes,
-            "references": _source_ref_payload(topic),
+            "reference_chunk_ids": topic.evidence_chunk_ids,
         }
         for topic in topics
     ]

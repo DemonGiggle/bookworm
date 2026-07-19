@@ -70,7 +70,7 @@ The core model lives in `src/digester/core/models.py`.
 - `source_path`: original file path
 - `locator`: source-local anchor such as `page 3`, `sheet Summary`, or `document-body`
 
-This model is intentionally small because it is serialized into prompt payloads and markdown outputs.
+This model is intentionally small. Application code resolves model-selected `chunk_id` values to `SourceRef` instances; paths and locators are rendered in markdown outputs but are not copied by the model.
 
 ### 4.2 DocumentSection
 
@@ -117,12 +117,15 @@ Chunks are designed to be provider-facing payloads that remain small enough for 
 - `summary`
 - `key_points`
 - `references`
+- `evidence_chunk_ids`
+- `evidence_refs`
 
 The `merge()` method merges topic updates from successive LLM iterations by:
 
 1. Appending additional summary material
 2. Deduplicating key points
-3. Deduplicating references while preserving order
+3. Deduplicating references and evidence chunk IDs while preserving order
+4. Retaining the chunk-to-reference index for later grounded finalization
 
 ### 4.6 DigestConfig
 
@@ -310,7 +313,7 @@ The user prompt includes:
 - the current chunk batch
 - hard constraints such as max active topics and anti-duplication guidance
 
-The prompt contract treats `routing_description` and `workflow_notes` as first-class topic fields so downstream skill exports do not have to infer router text from summary prose.
+The prompt contract treats `routing_description`, `workflow_notes`, and `reference_chunk_ids` as first-class topic fields. Models select only IDs supplied in the current batch; application code resolves them to canonical `SourceRef` objects and rejects unknown or stale IDs.
 
 ### 8.2 Finalization Prompt
 
@@ -335,13 +338,7 @@ Digest response shape:
       "summary": "Short summary",
       "key_points": ["Fact 1", "Fact 2"],
       "workflow_notes": ["Check the cited source before applying the summarized workflow."],
-      "references": [
-        {
-          "source_id": "source",
-          "source_path": "/tmp/source.txt",
-          "locator": "page 1"
-        }
-      ]
+      "reference_chunk_ids": ["source-chunk-1"]
     }
   ],
   "should_continue": true,
@@ -361,13 +358,7 @@ Finalize response shape:
       "summary": "Final concise summary",
       "key_points": ["Fact 1", "Fact 2"],
       "workflow_notes": ["Check the cited source before applying the summarized workflow."],
-      "references": [
-        {
-          "source_id": "source",
-          "source_path": "/tmp/source.txt",
-          "locator": "page 1"
-        }
-      ]
+      "reference_chunk_ids": ["source-chunk-1"]
     }
   ]
 }

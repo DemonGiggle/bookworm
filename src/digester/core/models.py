@@ -180,6 +180,8 @@ class TopicDigest:
     key_points: List[str] = field(default_factory=list)
     workflow_notes: List[str] = field(default_factory=list)
     references: List[SourceRef] = field(default_factory=list)
+    evidence_chunk_ids: List[str] = field(default_factory=list)
+    evidence_refs: Dict[str, SourceRef] = field(default_factory=dict)
 
     def merge(self, other: "TopicDigest") -> None:
         self.routing_description = _merge_prefer_richer_text(
@@ -191,6 +193,10 @@ class TopicDigest:
         self.key_points = _dedupe_preserve_order(self.key_points + other.key_points)
         self.workflow_notes = _dedupe_preserve_order(self.workflow_notes + other.workflow_notes)
         self.references = _dedupe_source_refs(self.references + other.references)
+        self.evidence_chunk_ids = _dedupe_preserve_order(
+            self.evidence_chunk_ids + other.evidence_chunk_ids
+        )
+        self.evidence_refs.update(other.evidence_refs)
 
 
 @dataclass
@@ -226,7 +232,7 @@ class DigestDecision:
     def from_payload(
         cls,
         payload: Dict[str, object],
-        fallback_refs: Sequence[SourceRef],
+        chunk_refs: Dict[str, SourceRef],
     ) -> "DigestDecision":
         should_continue = payload.get("should_continue")
         if not isinstance(should_continue, bool):
@@ -238,25 +244,20 @@ class DigestDecision:
             for raw_topic in raw_topics:
                 if not isinstance(raw_topic, dict):
                     continue
-                refs = raw_topic.get("references", [])
-                parsed_refs: List[SourceRef] = []
-                if isinstance(refs, list):
-                    for ref in refs:
-                        if not isinstance(ref, dict):
-                            continue
-                        source_id = str(ref.get("source_id", "")).strip()
-                        source_path = str(ref.get("source_path", "")).strip()
-                        locator = str(ref.get("locator", "")).strip()
-                        if source_id and source_path and locator:
-                            parsed_refs.append(
-                                SourceRef(
-                                    source_id=source_id,
-                                    source_path=source_path,
-                                    locator=locator,
-                                )
-                            )
-                if not parsed_refs:
-                    parsed_refs = list(fallback_refs)
+                raw_chunk_ids = raw_topic.get("reference_chunk_ids", [])
+                if not isinstance(raw_chunk_ids, list):
+                    raise ValueError("Topic reference_chunk_ids must be a list.")
+                chunk_ids = _dedupe_preserve_order(
+                    str(chunk_id) for chunk_id in raw_chunk_ids
+                )
+                unknown_ids = [chunk_id for chunk_id in chunk_ids if chunk_id not in chunk_refs]
+                if unknown_ids:
+                    raise ValueError(
+                        "Topic referenced unknown chunk IDs: {ids}.".format(
+                            ids=", ".join(unknown_ids)
+                        )
+                    )
+                parsed_refs = _dedupe_source_refs(chunk_refs[chunk_id] for chunk_id in chunk_ids)
                 topic_updates.append(
                     TopicDigest(
                         slug=str(raw_topic.get("slug", "")).strip(),
@@ -268,6 +269,8 @@ class DigestDecision:
                         key_points=coerce_text_list(raw_topic.get("key_points", [])),
                         workflow_notes=coerce_text_list(raw_topic.get("workflow_notes", [])),
                         references=parsed_refs,
+                        evidence_chunk_ids=chunk_ids,
+                        evidence_refs={chunk_id: chunk_refs[chunk_id] for chunk_id in chunk_ids},
                     )
                 )
         return cls(

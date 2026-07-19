@@ -1,21 +1,11 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Dict
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-
-SOURCE_REF_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "source_id": {"type": "string"},
-        "source_path": {"type": "string"},
-        "locator": {"type": "string"},
-    },
-    "required": ["source_id", "source_path", "locator"],
-    "additionalProperties": False,
-}
 
 TOPIC_SCHEMA = {
     "type": "object",
@@ -26,7 +16,7 @@ TOPIC_SCHEMA = {
         "summary": {"type": "string"},
         "key_points": {"type": "array", "items": {"type": "string"}},
         "workflow_notes": {"type": "array", "items": {"type": "string"}},
-        "references": {"type": "array", "items": SOURCE_REF_SCHEMA},
+        "reference_chunk_ids": {"type": "array", "items": {"type": "string"}},
     },
     "required": [
         "slug",
@@ -35,7 +25,7 @@ TOPIC_SCHEMA = {
         "summary",
         "key_points",
         "workflow_notes",
-        "references",
+        "reference_chunk_ids",
     ],
     "additionalProperties": False,
 }
@@ -59,6 +49,22 @@ FINALIZE_RESPONSE_SCHEMA = {
     "required": ["topics"],
     "additionalProperties": False,
 }
+
+
+def schema_with_allowed_chunk_ids(
+    schema: Dict[str, object],
+    response_field: str,
+    chunk_ids: object,
+) -> Dict[str, object]:
+    resolved_schema = deepcopy(schema)
+    topic_schema = resolved_schema["properties"][response_field]["items"]
+    reference_schema = topic_schema["properties"]["reference_chunk_ids"]
+    allowed_ids = list(dict.fromkeys(str(chunk_id) for chunk_id in chunk_ids))
+    if allowed_ids:
+        reference_schema["items"] = {"type": "string", "enum": allowed_ids}
+    else:
+        reference_schema["maxItems"] = 0
+    return resolved_schema
 
 
 def validate_payload(
