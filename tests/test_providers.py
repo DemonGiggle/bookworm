@@ -500,6 +500,43 @@ def test_opencode_go_uses_distinct_model_for_grounding_review(monkeypatch) -> No
     )
 
     assert request_models == [None, "grok-4.5"]
+
+
+def test_opencode_go_retries_one_transient_upstream_failure(monkeypatch) -> None:
+    provider = OpenCodeGoProvider(model="kimi-k2.6", api_key="go-key")
+    outcomes = iter([ValueError("Upstream request failed"), "ok"])
+    attempts = []
+
+    def fake_request(self, *args, **kwargs):
+        attempts.append(kwargs)
+        outcome = next(outcomes)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(OpenAICompatibleProvider, "_request_json_completion", fake_request)
+    monkeypatch.setattr("digester.providers.opencode_go_provider.sleep", lambda _: None)
+
+    result = provider._request_json_completion(system_prompt="system", user_prompt="user")
+
+    assert result == "ok"
+    assert len(attempts) == 2
+
+
+def test_opencode_go_does_not_retry_unrelated_bad_request(monkeypatch) -> None:
+    provider = OpenCodeGoProvider(model="kimi-k2.6", api_key="go-key")
+    attempts = []
+
+    def fake_request(self, *args, **kwargs):
+        attempts.append(kwargs)
+        raise ValueError("Unsupported response format")
+
+    monkeypatch.setattr(OpenAICompatibleProvider, "_request_json_completion", fake_request)
+
+    with pytest.raises(ValueError, match="Unsupported response format"):
+        provider._request_json_completion(system_prompt="system", user_prompt="user")
+
+    assert len(attempts) == 1
     assert provider.finalize_reasoning_effort == "none"
 
 
