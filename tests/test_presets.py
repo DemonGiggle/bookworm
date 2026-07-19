@@ -20,6 +20,7 @@ def test_frontier_preset_and_individual_overrides_are_reproducible() -> None:
     assert preset.max_chunk_tokens == 1536
     assert preset.context_window_tokens == 128000
     assert preset.finalize_max_output_tokens == 8192
+    assert preset.digest_temperature == 0.1
     assert preset.metadata()["name"] == "frontier"
 
 
