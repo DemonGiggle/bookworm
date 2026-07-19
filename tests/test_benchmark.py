@@ -67,3 +67,24 @@ def test_provenance_scoring_penalizes_reference_on_wrong_topic() -> None:
 
     assert scores["provenance"]["reference_precision"] == 0.0
     assert scores["provenance"]["reference_recall"] == 0.0
+
+
+def test_scoring_accepts_null_optional_expectations() -> None:
+    result = DigestResult(documents=[], chunks=[], topics=[], stop_reason="fixture")
+    scores = benchmark.score_result(
+        result,
+        {"topics": None, "actionable_details": None, "unsupported_terms": None},
+    )
+    assert scores["correctness"]["topic_recall"] == 1.0
+
+
+def test_benchmark_handles_repeated_empty_topic_sets(monkeypatch, tmp_path: Path) -> None:
+    empty = DigestResult(documents=[], chunks=[], topics=[], stop_reason="fixture")
+    monkeypatch.setattr(benchmark, "_run_once", lambda *args, **kwargs: (empty, 0.01))
+    report = benchmark.run_benchmark(
+        [benchmark.Candidate("empty", "mock-llm", "fixture", "local-26b")],
+        benchmark.CORPUS_DIR,
+        tmp_path,
+        repetitions=2,
+    )
+    assert report["runs"][0]["scores"]["stability"]["slug_stability"] == 1.0
