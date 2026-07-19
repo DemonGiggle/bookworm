@@ -50,8 +50,11 @@ class OllamaProvider(LLMProvider):
         timeout_seconds: Optional[int] = None,
         digest_temperature: float = 0.4,
         finalize_temperature: float = 0.1,
+        finalize_max_output_tokens: int = 4096,
     ) -> None:
         super().__init__()
+        if finalize_max_output_tokens < 1:
+            raise ValueError("Finalization output-token budget must be at least 1.")
         self.model = model
         self.host = host
         self.port = port
@@ -59,6 +62,7 @@ class OllamaProvider(LLMProvider):
         self.base_url = _normalize_base_url(host=host, port=port)
         self.digest_temperature = digest_temperature
         self.finalize_temperature = finalize_temperature
+        self.finalize_max_output_tokens = finalize_max_output_tokens
 
     def _request_content(
         self,
@@ -244,7 +248,7 @@ class OllamaProvider(LLMProvider):
                 temperature=self.finalize_temperature,
                 response_schema=response_schema,
                 schema_name="bookworm_finalize_response",
-                max_output_tokens=4096,
+                max_output_tokens=self.finalize_max_output_tokens,
             )
             parsed = parse_finalized_topics(payload, fallback_topics=[topic])
             if len(parsed) != 1 or parsed[0].slug != topic.slug:

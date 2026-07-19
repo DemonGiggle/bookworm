@@ -145,7 +145,7 @@ The `merge()` method merges topic updates from successive LLM iterations by:
 
 This is the primary place to tune cost, latency, and recall.
 
-Named `legacy`, `local-26b`, and `frontier` presets resolve these settings together with stage temperatures. The resolved preset is logged as machine-readable JSON for reproduction; explicit CLI values win over preset defaults. Vision support is represented by explicit analyzer capability rather than model-name inference.
+Named `legacy`, `local-26b`, and `frontier` presets resolve these settings together with stage temperatures and the per-topic finalization output-token budget. The frontier preset allows 8,192 completion tokens so reasoning models have room to emit the final JSON after internal reasoning; legacy and local-26b retain a 4,096-token ceiling. The resolved preset is logged as machine-readable JSON for reproduction; explicit CLI values, including `--finalize-max-output-tokens`, win over preset defaults. Vision support is represented by explicit analyzer capability rather than model-name inference.
 
 ## 5. Source Ingestion Pipeline
 

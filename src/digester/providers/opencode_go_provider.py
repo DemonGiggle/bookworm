@@ -36,6 +36,7 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
         api_key: str,
         digest_temperature: float = 0.4,
         finalize_temperature: float = 0.1,
+        finalize_max_output_tokens: int = 4096,
     ) -> None:
         normalized_model = normalize_opencode_go_model(model)
         if normalized_model.lower() in _MESSAGES_ONLY_MODELS:
@@ -50,4 +51,5 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
             base_url=OPENCODE_GO_BASE_URL,
             digest_temperature=digest_temperature,
             finalize_temperature=finalize_temperature,
+            finalize_max_output_tokens=finalize_max_output_tokens,
         )

@@ -23,6 +23,7 @@ class ProviderSettings:
     timeout_seconds: Optional[int] = None
     digest_temperature: float = 0.4
     finalize_temperature: float = 0.1
+    finalize_max_output_tokens: int = 4096
 
 
 def create_provider(settings: ProviderSettings) -> LLMProvider:
@@ -33,6 +34,7 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             organization=settings.organization,
             digest_temperature=settings.digest_temperature,
             finalize_temperature=settings.finalize_temperature,
+            finalize_max_output_tokens=settings.finalize_max_output_tokens,
         )
     if settings.provider_kind == "openai-compatible":
         return OpenAICompatibleProvider(
@@ -41,6 +43,7 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             base_url=settings.base_url or "",
             digest_temperature=settings.digest_temperature,
             finalize_temperature=settings.finalize_temperature,
+            finalize_max_output_tokens=settings.finalize_max_output_tokens,
         )
     if settings.provider_kind == "opencode-go":
         return OpenCodeGoProvider(
@@ -48,6 +51,7 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             api_key=settings.api_key,
             digest_temperature=settings.digest_temperature,
             finalize_temperature=settings.finalize_temperature,
+            finalize_max_output_tokens=settings.finalize_max_output_tokens,
         )
     if settings.provider_kind == "ollama":
         return OllamaProvider(
@@ -57,6 +61,7 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             timeout_seconds=settings.timeout_seconds,
             digest_temperature=settings.digest_temperature,
             finalize_temperature=settings.finalize_temperature,
+            finalize_max_output_tokens=settings.finalize_max_output_tokens,
         )
     if settings.provider_kind == "mock-llm":
         return MockLLMProvider(model=settings.model)

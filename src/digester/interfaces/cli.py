@@ -126,6 +126,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sampling temperature for finalize-stage text generation.",
     )
     digest_parser.add_argument(
+        "--finalize-max-output-tokens",
+        type=int,
+        help="Maximum completion tokens for each topic finalization request.",
+    )
+    digest_parser.add_argument(
         "--image-temperature",
         type=float,
         default=float(os.getenv("BOOKWORM_IMAGE_TEMPERATURE", "0.0")),
@@ -321,6 +326,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         max_active_topic_tokens=args.max_active_topic_tokens,
         digest_temperature=args.digest_temperature,
         finalize_temperature=args.finalize_temperature,
+        finalize_max_output_tokens=args.finalize_max_output_tokens,
     )
     for key, value in preset.metadata().items():
         if hasattr(args, key):
@@ -356,6 +362,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 timeout_seconds=args.timeout_sc,
                 digest_temperature=args.digest_temperature,
                 finalize_temperature=args.finalize_temperature,
+                finalize_max_output_tokens=args.finalize_max_output_tokens,
             )
         )
         image_analyzer = _resolve_image_analyzer(args)

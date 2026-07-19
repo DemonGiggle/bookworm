@@ -398,12 +398,14 @@ def test_create_provider_passes_stage_specific_temperatures() -> None:
             base_url="http://127.0.0.1:9000/v1",
             digest_temperature=0.55,
             finalize_temperature=0.15,
+            finalize_max_output_tokens=9000,
         )
     )
 
     assert isinstance(provider, OpenAIProvider)
     assert provider.digest_temperature == 0.55
     assert provider.finalize_temperature == 0.15
+    assert provider.finalize_max_output_tokens == 9000
 
 
 def test_create_provider_builds_opencode_go_provider_and_normalizes_model() -> None:
@@ -414,6 +416,7 @@ def test_create_provider_builds_opencode_go_provider_and_normalizes_model() -> N
             api_key="go-key",
             digest_temperature=0.2,
             finalize_temperature=0.0,
+            finalize_max_output_tokens=8192,
         )
     )
 
@@ -422,6 +425,7 @@ def test_create_provider_builds_opencode_go_provider_and_normalizes_model() -> N
     assert provider.base_url == OPENCODE_GO_BASE_URL
     assert provider.digest_temperature == 0.2
     assert provider.finalize_temperature == 0.0
+    assert provider.finalize_max_output_tokens == 8192
 
 
 @pytest.mark.parametrize("model", ["Qwen3.7-Plus", "opencode-go/MiniMax-M3"])
@@ -1104,6 +1108,44 @@ def test_openai_provider_uses_stage_specific_temperatures(monkeypatch) -> None:
     assert captured_calls[0]["temperature"] == 0.5
     assert captured_calls[1]["temperature"] == 0.2
     assert captured_calls[1]["max_completion_tokens"] == 4096
+
+
+def test_openai_provider_empty_response_reports_token_limit_metadata(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason="length",
+                message=SimpleNamespace(content=""),
+            )
+        ],
+        usage=SimpleNamespace(
+            completion_tokens=4096,
+            completion_tokens_details=SimpleNamespace(reasoning_tokens=4096),
+        ),
+    )
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(create=lambda **kwargs: response)
+        )
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+
+    with pytest.raises(ValueError) as exc_info:
+        provider._request_json_completion(
+            system_prompt="system",
+            user_prompt="user",
+            temperature=0.0,
+            response_schema={"type": "object"},
+            schema_name="test",
+            max_output_tokens=4096,
+        )
+
+    message = str(exc_info.value)
+    assert "finish_reason=length" in message
+    assert "completion_tokens=4096" in message
+    assert "reasoning_tokens=4096" in message
+    assert "Increase the finalization output-token budget" in message
 
 
 def test_openai_provider_reports_invalid_json_with_context(monkeypatch) -> None:

@@ -105,7 +105,7 @@ bookworm digest docs/*.txt \
   --verbose
 ```
 
-Use `--preset local-26b` for conservative local inference defaults (single-chunk batches, 1,024-token chunks, lower temperatures, and smaller active state), or `--preset frontier` for a larger 128k context profile. Every run logs the fully resolved preset as sorted JSON, and individual CLI options override preset values. The default `legacy` preset preserves previous behavior.
+Use `--preset local-26b` for conservative local inference defaults (single-chunk batches, 1,024-token chunks, lower temperatures, and smaller active state), or `--preset frontier` for a larger 128k context profile and an 8,192-token finalization budget suitable for reasoning models. Every run logs the fully resolved preset as sorted JSON, and individual CLI options override preset values. The default `legacy` preset preserves the previous 4,096-token finalization budget. Override either preset with `--finalize-max-output-tokens` when a provider needs a different ceiling.
 
 ## OpenCode Go example
 
