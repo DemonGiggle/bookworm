@@ -424,7 +424,7 @@ def test_create_provider_builds_opencode_go_provider_and_normalizes_model() -> N
     assert provider.finalize_temperature == 0.0
 
 
-@pytest.mark.parametrize("model", ["qwen3.7-plus", "opencode-go/minimax-m3"])
+@pytest.mark.parametrize("model", ["Qwen3.7-Plus", "opencode-go/MiniMax-M3"])
 def test_opencode_go_rejects_messages_only_models(model) -> None:
     with pytest.raises(ValueError, match="uses the /messages API"):
         create_provider(

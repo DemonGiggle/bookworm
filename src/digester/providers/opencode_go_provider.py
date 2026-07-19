@@ -38,7 +38,7 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
         finalize_temperature: float = 0.1,
     ) -> None:
         normalized_model = normalize_opencode_go_model(model)
-        if normalized_model in _MESSAGES_ONLY_MODELS:
+        if normalized_model.lower() in _MESSAGES_ONLY_MODELS:
             raise ValueError(
                 "OpenCode Go model {model} uses the /messages API, which Bookworm does not "
                 "support yet. Choose a Go model exposed through /chat/completions, such as "

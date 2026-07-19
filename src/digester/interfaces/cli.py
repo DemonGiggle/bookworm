@@ -43,7 +43,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     credential_parser.add_argument(
         "--api-key-env",
-        help="Environment variable to read the provider API key from. Defaults to OPENAI_API_KEY.",
+        help="Environment variable to read the provider API key from. Defaults by provider kind.",
+    )
+    image_credential_parser = digest_parser.add_mutually_exclusive_group()
+    image_credential_parser.add_argument(
+        "--image-api-key-file",
+        help="Optional API key file for the image analyzer when it uses different credentials.",
+    )
+    image_credential_parser.add_argument(
+        "--image-api-key-env",
+        help="Optional environment variable for the image analyzer API key.",
     )
     digest_parser.add_argument(
         "--base-url",
@@ -68,7 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     digest_parser.add_argument(
         "--image-analyzer-kind",
-        choices=["openai", "openai-compatible", "ollama", "mock-image"],
+        choices=["openai", "openai-compatible", "opencode-go", "ollama", "mock-image"],
         help="Optional analyzer for embedded images in supported source formats.",
     )
     digest_parser.add_argument(
@@ -206,11 +215,18 @@ def _resolve_api_key(args: argparse.Namespace) -> str:
     return _resolve_required_api_key(args)
 
 
-def _resolve_required_api_key(args: argparse.Namespace) -> str:
-    if args.api_key_file:
-        return _read_api_key_file(args.api_key_file)
-    default_env = "OPENCODE_API_KEY" if args.provider_kind == "opencode-go" else "OPENAI_API_KEY"
-    env_var_name = args.api_key_env or default_env
+def _resolve_required_api_key(
+    args: argparse.Namespace,
+    provider_kind: Optional[str] = None,
+    api_key_file: Optional[str] = None,
+    api_key_env: Optional[str] = None,
+) -> str:
+    key_file = api_key_file if api_key_file is not None else args.api_key_file
+    if key_file:
+        return _read_api_key_file(key_file)
+    kind = provider_kind or args.provider_kind
+    default_env = "OPENCODE_API_KEY" if kind == "opencode-go" else "OPENAI_API_KEY"
+    env_var_name = api_key_env or args.api_key_env or default_env
     api_key = os.getenv(env_var_name, "").strip()
     if not api_key:
         raise ValueError(
@@ -227,7 +243,20 @@ def _resolve_image_analyzer(args: argparse.Namespace) -> Optional[ImageAnalyzer]
     model = args.image_analyzer_model or args.model
     api_key = ""
     if args.image_analyzer_kind not in {"mock-image", "ollama"}:
-        api_key = _resolve_required_api_key(args)
+        if args.image_api_key_file or args.image_api_key_env:
+            api_key = _resolve_required_api_key(
+                args,
+                provider_kind=args.image_analyzer_kind,
+                api_key_file=args.image_api_key_file or "",
+                api_key_env=args.image_api_key_env,
+            )
+        elif args.api_key_file or args.api_key_env:
+            api_key = _resolve_required_api_key(args)
+        else:
+            api_key = _resolve_required_api_key(
+                args,
+                provider_kind=args.image_analyzer_kind,
+            )
     return create_image_analyzer(
         ImageAnalyzerSettings(
             analyzer_kind=args.image_analyzer_kind,

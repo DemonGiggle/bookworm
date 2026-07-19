@@ -721,6 +721,95 @@ def test_cli_reads_image_analyzer_api_key_when_provider_does_not_need_one(
     }
 
 
+def test_cli_resolves_primary_and_image_credentials_by_provider(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    seen = {}
+    monkeypatch.setenv("OPENCODE_API_KEY", "go-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "vision-key")
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["provider_key"] = settings.api_key
+        return CliFakeProvider()
+
+    def fake_create_image_analyzer(settings):
+        seen["image_key"] = settings.api_key
+        return MockImageAnalyzer(model=settings.model)
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+    monkeypatch.setattr(cli, "create_image_analyzer", fake_create_image_analyzer)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(tmp_path / "artifacts"),
+            "--provider-kind",
+            "opencode-go",
+            "--model",
+            "kimi-k3",
+            "--image-analyzer-kind",
+            "openai",
+            "--image-analyzer-model",
+            "gpt-4.1-mini",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen == {"provider_key": "go-key", "image_key": "vision-key"}
+
+
+def test_cli_image_specific_key_overrides_shared_primary_key(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    primary_key = tmp_path / "primary.key"
+    primary_key.write_text("primary-key\n", encoding="utf-8")
+    seen = {}
+    monkeypatch.setenv("BOOKWORM_IMAGE_KEY", "image-key")
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["provider_key"] = settings.api_key
+        return CliFakeProvider()
+
+    def fake_create_image_analyzer(settings):
+        seen["image_key"] = settings.api_key
+        return MockImageAnalyzer(model=settings.model)
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+    monkeypatch.setattr(cli, "create_image_analyzer", fake_create_image_analyzer)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(tmp_path / "artifacts"),
+            "--provider-kind",
+            "openai",
+            "--model",
+            "text-model",
+            "--api-key-file",
+            str(primary_key),
+            "--image-analyzer-kind",
+            "opencode-go",
+            "--image-analyzer-model",
+            "kimi-k2.6",
+            "--image-api-key-env",
+            "BOOKWORM_IMAGE_KEY",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen == {"provider_key": "primary-key", "image_key": "image-key"}
+
+
 def test_cli_configures_ollama_image_analyzer_without_api_key(monkeypatch, tmp_path: Path, capsys) -> None:
     input_path = tmp_path / "notes.txt"
     input_path.write_text("A concise document.", encoding="utf-8")
