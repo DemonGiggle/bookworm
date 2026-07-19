@@ -60,7 +60,12 @@ class DigestOrchestrator:
         self.progress_reporter.update(
             "Chunking {count} loaded document(s).".format(count=len(documents))
         )
-        chunks = chunk_documents(documents, max_chunk_chars=self.config.max_chunk_chars)
+        chunks = chunk_documents(
+            documents,
+            max_chunk_chars=self.config.max_chunk_chars,
+            max_chunk_tokens=self.config.max_chunk_tokens,
+            token_counter=self.config.token_counter,
+        )
         if not chunks:
             raise ValueError(_no_extractable_content_error(documents))
 
