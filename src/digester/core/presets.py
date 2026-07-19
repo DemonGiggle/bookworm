@@ -15,15 +15,16 @@ class ModelPreset:
     max_active_topic_tokens: int
     digest_temperature: float
     finalize_temperature: float
+    finalize_max_output_tokens: int
 
     def metadata(self) -> Dict[str, object]:
         return asdict(self)
 
 
 PRESETS = {
-    "legacy": ModelPreset("legacy", 2, None, None, 4096, 12, 12000, 0.4, 0.1),
-    "local-26b": ModelPreset("local-26b", 1, 1024, 32768, 8192, 6, 6000, 0.15, 0.0),
-    "frontier": ModelPreset("frontier", 2, 2048, 128000, 16384, 12, 12000, 0.3, 0.1),
+    "legacy": ModelPreset("legacy", 2, None, None, 4096, 12, 12000, 0.4, 0.1, 4096),
+    "local-26b": ModelPreset("local-26b", 1, 1024, 32768, 8192, 6, 6000, 0.15, 0.0, 4096),
+    "frontier": ModelPreset("frontier", 2, 2048, 128000, 16384, 12, 12000, 0.3, 0.1, 8192),
 }
 
 

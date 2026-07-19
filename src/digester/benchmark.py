@@ -126,6 +126,7 @@ def _run_once(candidate: Candidate, corpus_paths: Sequence[Path], output_dir: Pa
             ollama_port=int(os.getenv("OLLAMA_PORT") or "11434"),
             digest_temperature=preset.digest_temperature,
             finalize_temperature=preset.finalize_temperature,
+            finalize_max_output_tokens=preset.finalize_max_output_tokens,
         )
     )
     provider.validate_configuration()

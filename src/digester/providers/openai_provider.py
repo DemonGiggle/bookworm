@@ -30,16 +30,20 @@ class OpenAIProvider(LLMProvider):
         organization: Optional[str] = None,
         digest_temperature: float = 0.4,
         finalize_temperature: float = 0.1,
+        finalize_max_output_tokens: int = 4096,
     ) -> None:
         super().__init__()
         if not api_key:
             raise ValueError("An API key is required for hosted or compatible OpenAI clients.")
+        if finalize_max_output_tokens < 1:
+            raise ValueError("Finalization output-token budget must be at least 1.")
         self.model = model
         self.api_key = api_key
         self.base_url = base_url
         self.organization = organization
         self.digest_temperature = digest_temperature
         self.finalize_temperature = finalize_temperature
+        self.finalize_max_output_tokens = finalize_max_output_tokens
 
     def _client(self):
         from openai import OpenAI
@@ -164,7 +168,19 @@ class OpenAIProvider(LLMProvider):
             self._raise_openai_error(error)
         content = response.choices[0].message.content
         if not content:
-            raise ValueError("Model returned an empty response.")
+            choice = response.choices[0]
+            usage = getattr(response, "usage", None)
+            details = getattr(usage, "completion_tokens_details", None)
+            raise ValueError(
+                "Model returned an empty response (finish_reason={reason}, "
+                "completion_tokens={completion}, reasoning_tokens={reasoning}). "
+                "Increase the finalization output-token budget when finish_reason is length."
+                .format(
+                    reason=getattr(choice, "finish_reason", "unknown"),
+                    completion=getattr(usage, "completion_tokens", "unknown"),
+                    reasoning=getattr(details, "reasoning_tokens", "unknown"),
+                )
+            )
         self._log_response("OpenAI", self.model, content, perf_counter() - started_at)
         return content
 
@@ -285,7 +301,7 @@ class OpenAIProvider(LLMProvider):
                 temperature=self.finalize_temperature,
                 response_schema=response_schema,
                 schema_name="bookworm_finalize_response",
-                max_output_tokens=4096,
+                max_output_tokens=self.finalize_max_output_tokens,
             )
             parsed = parse_finalized_topics(payload, fallback_topics=[topic])
             if len(parsed) != 1 or parsed[0].slug != topic.slug:

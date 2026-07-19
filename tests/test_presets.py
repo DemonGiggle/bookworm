@@ -19,6 +19,7 @@ def test_frontier_preset_and_individual_overrides_are_reproducible() -> None:
     assert preset.batch_size == 3
     assert preset.max_chunk_tokens == 1536
     assert preset.context_window_tokens == 128000
+    assert preset.finalize_max_output_tokens == 8192
     assert preset.metadata()["name"] == "frontier"
 
 
@@ -29,6 +30,7 @@ def test_legacy_preset_preserves_previous_defaults() -> None:
     assert preset.max_chunk_tokens is None
     assert preset.digest_temperature == 0.4
     assert preset.max_active_topics == 12
+    assert preset.finalize_max_output_tokens == 4096
 
 
 def test_unknown_preset_and_override_fail_explicitly() -> None:
