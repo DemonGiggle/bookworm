@@ -108,6 +108,7 @@ def build_finalize_system_prompt() -> str:
         f"{_ROUTING_EXAMPLE_GUIDANCE} "
         "Refine only from the supplied topic data and evidence snippets; do not add facts that are not present. Produce rich markdown-ready summaries that keep the most useful implementation and setup detail. Each topic should read like a reusable skill file for coding agents such as Codex, Claude Code, and Copilot. "
         "Do not collapse away hardware setup flows, ordered procedures, commands, prerequisites, warnings, validation checks, or troubleshooting notes. "
+        "Preserve every supplied reference_chunk_id in the finalized topic; these IDs are the accumulated grounding for facts already present in the draft. "
         "Remove duplication, but preserve concrete facts and enough detail that another LLM or engineer could act on the output without rereading the whole source."
     )
 
@@ -166,6 +167,7 @@ def build_finalize_user_prompt(topics: Sequence[TopicDigest]) -> str:
         "Finalize this topic for markdown export. Refine weak wording only from the supplied facts and evidence snippets. "
         "Make routing_description strong enough for a frontmatter description and When To Use section. "
         "Make workflow_notes capture validation checks, caveats, and source-backed operating guidance. "
+        "Return the complete supplied reference_chunk_ids list; do not discard accumulated evidence while retaining draft facts. "
         "Aim for summaries of 2-5 compact paragraphs when the source supports it, key_points with roughly 5-12 concrete items for dense topics, and workflow_notes with 3-8 grounded notes. "
         "Keep the output concise enough for downstream context windows, but detailed enough to preserve setup flow, operational nuance, and important edge cases.\n"
     )

@@ -960,6 +960,58 @@ def test_parse_finalized_topics_resolves_chunk_ids_from_fallback_topic() -> None
     assert parsed[0].references == [fallback_ref]
 
 
+def test_parse_finalized_topics_preserves_all_accumulated_evidence() -> None:
+    first_ref = SourceRef(
+        source_id="source",
+        source_path="/tmp/source.pdf",
+        locator="page 1",
+    )
+    second_ref = SourceRef(
+        source_id="source",
+        source_path="/tmp/source.pdf",
+        locator="page 2",
+    )
+    fallback = TopicDigest(
+        slug="overview",
+        title="Overview",
+        routing_description="Use this skill when reviewing the draft overview guidance.",
+        summary="Draft facts grounded across both pages.",
+        key_points=[],
+        references=[first_ref, second_ref],
+        evidence_chunk_ids=["source-chunk-1", "source-chunk-2"],
+        evidence_refs={
+            "source-chunk-1": first_ref,
+            "source-chunk-2": second_ref,
+        },
+        evidence_texts={
+            "source-chunk-1": "First grounded fact.",
+            "source-chunk-2": "Second grounded fact.",
+        },
+    )
+
+    parsed = parse_finalized_topics(
+        {
+            "topics": [
+                {
+                    "slug": "overview",
+                    "title": "Overview",
+                    "routing_description": "Use this skill when reviewing the overview guidance.",
+                    "summary": "Retains facts grounded across both pages.",
+                    "key_points": ["Keep both grounded facts."],
+                    "workflow_notes": ["Verify the cited source pages."],
+                    "reference_chunk_ids": ["source-chunk-1"],
+                }
+            ]
+        },
+        fallback_topics=[fallback],
+    )
+
+    assert parsed[0].evidence_chunk_ids == ["source-chunk-1", "source-chunk-2"]
+    assert parsed[0].references == [first_ref, second_ref]
+    assert parsed[0].evidence_refs == fallback.evidence_refs
+    assert parsed[0].evidence_texts == fallback.evidence_texts
+
+
 def test_parse_finalized_topics_treats_null_routing_description_as_empty_string() -> None:
     parsed = parse_finalized_topics(
         {

@@ -93,6 +93,7 @@ def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
     assert "workflow_notes with 3-8 grounded notes" in user_prompt
     assert "setup flow, operational nuance, and important edge cases" in user_prompt
     assert '"reference_chunk_ids": [\n      "setup-guide-chunk-1"' in user_prompt
+    assert "Return the complete supplied reference_chunk_ids list" in user_prompt
     assert '"source_path": "/tmp/setup-guide.txt"' not in user_prompt
     assert '"locator": "section 2"' not in user_prompt
     payload = json.loads(user_prompt[user_prompt.index("[") :])
