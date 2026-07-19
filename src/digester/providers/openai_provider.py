@@ -10,6 +10,7 @@ from ..core.prompts import (
     build_digest_user_prompt,
     build_finalize_system_prompt,
     build_finalize_user_prompt,
+    build_grounding_review_system_prompt,
 )
 from .base import LLMProvider
 from .parsing import parse_digest_decision, parse_finalized_topics
@@ -32,12 +33,15 @@ class OpenAIProvider(LLMProvider):
         finalize_temperature: float = 0.1,
         finalize_max_output_tokens: int = 4096,
         finalize_reasoning_effort: Optional[str] = None,
+        finalize_review_passes: int = 0,
     ) -> None:
         super().__init__()
         if not api_key:
             raise ValueError("An API key is required for hosted or compatible OpenAI clients.")
         if finalize_max_output_tokens < 1:
             raise ValueError("Finalization output-token budget must be at least 1.")
+        if finalize_review_passes < 0:
+            raise ValueError("Finalization review passes cannot be negative.")
         self.model = model
         self.api_key = api_key
         self.base_url = base_url
@@ -46,6 +50,7 @@ class OpenAIProvider(LLMProvider):
         self.finalize_temperature = finalize_temperature
         self.finalize_max_output_tokens = finalize_max_output_tokens
         self.finalize_reasoning_effort = finalize_reasoning_effort
+        self.finalize_review_passes = finalize_review_passes
 
     def _client(self):
         from openai import OpenAI
@@ -285,39 +290,46 @@ class OpenAIProvider(LLMProvider):
             return []
         finalized = []
         for topic in topics:
-            response_schema = schema_with_allowed_chunk_ids(
-                FINALIZE_RESPONSE_SCHEMA,
-                "topics",
-                topic.evidence_chunk_ids,
-            )
-            payload = self._complete_json(
-                system_prompt=build_finalize_system_prompt(),
-                user_prompt=build_finalize_user_prompt([topic]),
-                retry_example_payload={
-                    "topics": [
-                        {
-                            "slug": "example-topic",
-                            "title": "Example Topic",
-                            "routing_description": "Use this skill when reviewing the finalized example workflow.",
-                            "summary": "Summarizes the finalized example workflow and its constraints.",
-                            "key_points": ["Follow the finalized example workflow in order."],
-                            "workflow_notes": ["Validate the finalized example output before reuse."],
-                            "reference_chunk_ids": ["example-source-chunk-1"],
-                        }
-                    ]
-                },
-                temperature=self.finalize_temperature,
-                response_schema=response_schema,
-                schema_name="bookworm_finalize_response",
-                max_output_tokens=self.finalize_max_output_tokens,
-                reasoning_effort=self.finalize_reasoning_effort,
-            )
-            parsed = parse_finalized_topics(payload, fallback_topics=[topic])
-            if len(parsed) != 1 or parsed[0].slug != topic.slug:
-                raise ValueError(
-                    "Finalizer must return exactly one topic with canonical slug '{slug}'.".format(
-                        slug=topic.slug
-                    )
+            candidate = topic
+            system_prompts = [build_finalize_system_prompt()] + [
+                build_grounding_review_system_prompt()
+                for _ in range(self.finalize_review_passes)
+            ]
+            for system_prompt in system_prompts:
+                response_schema = schema_with_allowed_chunk_ids(
+                    FINALIZE_RESPONSE_SCHEMA,
+                    "topics",
+                    candidate.evidence_chunk_ids,
                 )
-            finalized.extend(parsed)
+                payload = self._complete_json(
+                    system_prompt=system_prompt,
+                    user_prompt=build_finalize_user_prompt([candidate]),
+                    retry_example_payload={
+                        "topics": [
+                            {
+                                "slug": "example-topic",
+                                "title": "Example Topic",
+                                "routing_description": "Use this skill when reviewing the finalized example workflow.",
+                                "summary": "Summarizes the finalized example workflow and its constraints.",
+                                "key_points": ["Follow the finalized example workflow in order."],
+                                "workflow_notes": ["Validate the finalized example output before reuse."],
+                                "reference_chunk_ids": ["example-source-chunk-1"],
+                            }
+                        ]
+                    },
+                    temperature=self.finalize_temperature,
+                    response_schema=response_schema,
+                    schema_name="bookworm_finalize_response",
+                    max_output_tokens=self.finalize_max_output_tokens,
+                    reasoning_effort=self.finalize_reasoning_effort,
+                )
+                parsed = parse_finalized_topics(payload, fallback_topics=[candidate])
+                if len(parsed) != 1 or parsed[0].slug != topic.slug:
+                    raise ValueError(
+                        "Finalizer must return exactly one topic with canonical slug '{slug}'.".format(
+                            slug=topic.slug
+                        )
+                    )
+                candidate = parsed[0]
+            finalized.append(candidate)
         return finalized

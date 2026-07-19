@@ -57,6 +57,7 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
             finalize_reasoning_effort=(
                 "none" if normalized_model.lower().startswith("kimi-") else None
             ),
+            finalize_review_passes=1,
         )
 
     def _response_format(

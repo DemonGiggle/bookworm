@@ -10,6 +10,7 @@ from digester.core.prompts import (
     build_digest_user_prompt,
     build_finalize_system_prompt,
     build_finalize_user_prompt,
+    build_grounding_review_system_prompt,
 )
 from digester.images.openai_image_analyzer import _build_image_system_prompt
 
@@ -97,6 +98,9 @@ def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
     assert "omit plausible advice or consequences" in user_prompt
     assert "evidence snippets are authoritative" in system_prompt
     assert "Do not invent failure effects" in system_prompt
+    review_prompt = build_grounding_review_system_prompt()
+    assert "only authority" in review_prompt
+    assert "Prefer omission" in review_prompt
     assert '"source_path": "/tmp/setup-guide.txt"' not in user_prompt
     assert '"locator": "section 2"' not in user_prompt
     payload = json.loads(user_prompt[user_prompt.index("[") :])

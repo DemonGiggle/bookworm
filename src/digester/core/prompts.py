@@ -116,6 +116,17 @@ def build_finalize_system_prompt() -> str:
     )
 
 
+def build_grounding_review_system_prompt() -> str:
+    return (
+        "You are the final grounding auditor for an agent-readable skill. "
+        f"{_TOPIC_OUTPUT_CONTRACT} "
+        "The evidence snippets are the only authority. Review the supplied draft sentence by sentence and return a corrected topic. "
+        "Remove or narrow every statement, instruction, warning, formula, causal explanation, diagnostic conclusion, or recommendation that is not directly stated or unambiguously computable from the evidence. "
+        "Do not add new advice, improve the engineering design, repair source ambiguities, or extrapolate beyond the documented example. "
+        "Preserve supported operational detail and the complete supplied reference_chunk_ids. Prefer omission over a plausible unsupported claim."
+    )
+
+
 def _bounded_text_list(items: Sequence[str], max_chars: int) -> Sequence[str]:
     result = []
     used = 0

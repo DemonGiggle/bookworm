@@ -15,6 +15,7 @@ class OpenAICompatibleProvider(OpenAIProvider):
         finalize_temperature: float = 0.1,
         finalize_max_output_tokens: int = 4096,
         finalize_reasoning_effort: Optional[str] = None,
+        finalize_review_passes: int = 0,
     ) -> None:
         if not base_url:
             raise ValueError("A base URL is required for openai-compatible providers.")
@@ -26,6 +27,7 @@ class OpenAICompatibleProvider(OpenAIProvider):
             finalize_temperature=finalize_temperature,
             finalize_max_output_tokens=finalize_max_output_tokens,
             finalize_reasoning_effort=finalize_reasoning_effort,
+            finalize_review_passes=finalize_review_passes,
         )
 
     def validate_configuration(self) -> None:
