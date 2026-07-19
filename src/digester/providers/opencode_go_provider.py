@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import sleep
 from typing import Dict
 
 from .openai_compatible import OpenAICompatibleProvider
@@ -77,3 +78,15 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
                 "schema": schema,
             },
         }
+
+    def _request_json_completion(self, *args, **kwargs) -> str:
+        try:
+            return super()._request_json_completion(*args, **kwargs)
+        except ValueError as error:
+            if "Upstream request failed" not in str(error):
+                raise
+            self.progress_reporter.persist(
+                "OpenCode Go reported a transient upstream failure; retrying once."
+            )
+            sleep(1)
+            return super()._request_json_completion(*args, **kwargs)
