@@ -47,13 +47,14 @@ def test_digest_prompts_preserve_setup_and_hardware_detail() -> None:
     assert "workflow_notes" in system_prompt
     assert 'bad="Python web framework"' in system_prompt
     assert 'good="Use this skill when setting up Flask middleware or debugging request routing."' in system_prompt
-    assert "When uncertain, prefer should_continue=true" in system_prompt
+    assert "application, not this signal alone" in system_prompt
+    assert "Do not predict unseen chunks" in system_prompt
     assert "setup sequences" in user_prompt
     assert "verification steps" in user_prompt
     assert "active topics in view" in user_prompt
     assert "operational rules" in user_prompt
     assert "expand it with concrete evidence from this batch" in user_prompt
-    assert "mostly pivoting into different topics" in user_prompt
+    assert "should_continue is advisory only" in user_prompt
 
 
 def test_finalize_prompts_request_richer_markdown_ready_output() -> None:

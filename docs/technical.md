@@ -140,6 +140,7 @@ The `merge()` method merges topic updates from successive LLM iterations by:
 - `minimum_batches_before_stop`
 - `max_batches`
 - `max_active_topics`
+- `max_active_topic_tokens`
 - `max_topics` (compatibility alias for `max_active_topics`)
 
 This is the primary place to tune cost, latency, and recall.
@@ -320,6 +321,8 @@ The user prompt includes:
 - hard constraints such as max active topics and anti-duplication guidance
 
 The prompt contract treats `routing_description`, `workflow_notes`, and `reference_chunk_ids` as first-class topic fields. Models select only IDs supplied in the current batch; application code resolves them to canonical `SourceRef` objects and rejects unknown or stale IDs.
+
+`should_continue` is retained only as an advisory extraction signal. The orchestrator owns boundaries using deterministic source transitions, heading transitions combined with the advisory, and hard active-topic/token ceilings. Every flush emits a machine-readable reason such as `boundary[source-transition]`, `boundary[active-topic-limit]`, or `boundary[end-of-corpus]`; no signal can stop remaining chunks from being consumed.
 
 ### 8.2 Finalization Prompt
 

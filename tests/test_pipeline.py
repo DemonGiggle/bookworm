@@ -8,8 +8,15 @@ from openpyxl import Workbook
 from openpyxl.drawing.image import Image as SpreadsheetImage
 from PIL import Image as PilImage
 
-from digester.core import DigestConfig
-from digester.core.models import DigestBatchRequest, DigestDecision, TopicDigest
+from digester.core import DigestConfig, DigestOrchestrator
+from digester.core.models import (
+    DigestBatchRequest,
+    DigestDecision,
+    DocumentSection,
+    SourceDocument,
+    SourceRef,
+    TopicDigest,
+)
 from digester.images import MockImageAnalyzer
 from digester.interfaces.api import DocumentDigester
 from digester.providers.base import LLMProvider
@@ -64,6 +71,113 @@ class RecordingReporter:
 
     def clear(self) -> None:
         self.messages.append(("clear", ""))
+
+
+class BoundaryProvider(LLMProvider):
+    def __init__(self, advisory: bool) -> None:
+        self.advisory = advisory
+        self.digest_calls = 0
+        self.finalized = []
+
+    def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
+        self.digest_calls += 1
+        chunk = request.chunk_batch[0]
+        slug = "topic-{index}".format(index=self.digest_calls)
+        return DigestDecision(
+            topic_updates=[
+                TopicDigest(
+                    slug=slug,
+                    title="Topic {index}".format(index=self.digest_calls),
+                    routing_description="Use this skill when reviewing {slug}.".format(
+                        slug=slug
+                    ),
+                    summary="A useful source-backed summary for {slug}.".format(slug=slug),
+                    key_points=["Keep {slug} grounded.".format(slug=slug)],
+                    workflow_notes=["Validate {slug} before reuse.".format(slug=slug)],
+                    references=[chunk.source_ref],
+                )
+            ],
+            should_continue=self.advisory,
+            rationale="Fixed advisory for boundary testing.",
+        )
+
+    def finalize_topics(self, topics: List[TopicDigest]) -> List[TopicDigest]:
+        self.finalized.append(topics[0].slug)
+        return topics
+
+
+def _boundary_document(headings: List[str]) -> SourceDocument:
+    return SourceDocument(
+        source_id="boundary-source",
+        path=Path("boundary.txt"),
+        media_type="text/plain",
+        title="Boundary",
+        sections=[
+            DocumentSection(
+                heading=heading,
+                content="Evidence for {heading}.".format(heading=heading),
+                source_ref=SourceRef(
+                    "boundary-source",
+                    "boundary.txt",
+                    "section {index}".format(index=index),
+                ),
+            )
+            for index, heading in enumerate(headings, start=1)
+        ],
+    )
+
+
+def test_heading_boundary_uses_model_signal_only_as_advisory() -> None:
+    reporter = RecordingReporter()
+    provider = BoundaryProvider(advisory=False)
+
+    result = DigestOrchestrator(
+        provider=provider,
+        config=DigestConfig(batch_size=1, minimum_batches_before_stop=1),
+        progress_reporter=reporter,
+    ).run([_boundary_document(["First", "Second"])])
+
+    assert provider.digest_calls == 2
+    assert provider.finalized == ["topic-1", "topic-2"]
+    assert [topic.slug for topic in result.topics] == ["topic-1", "topic-2"]
+    assert any(
+        "boundary[heading-transition-with-model-advisory]" in message
+        for kind, message in reporter.messages
+        if kind == "persist"
+    )
+
+
+def test_never_ending_model_advisory_cannot_skip_corpus() -> None:
+    provider = BoundaryProvider(advisory=True)
+
+    result = DigestOrchestrator(
+        provider=provider,
+        config=DigestConfig(batch_size=1, minimum_batches_before_stop=1),
+    ).run([_boundary_document(["First", "Second", "Third"])])
+
+    assert provider.digest_calls == 3
+    assert [topic.slug for topic in result.topics] == ["topic-1", "topic-2", "topic-3"]
+
+
+def test_active_topic_limit_forces_machine_readable_boundary() -> None:
+    reporter = RecordingReporter()
+    provider = BoundaryProvider(advisory=True)
+
+    DigestOrchestrator(
+        provider=provider,
+        config=DigestConfig(
+            batch_size=1,
+            minimum_batches_before_stop=1,
+            max_active_topics=2,
+        ),
+        progress_reporter=reporter,
+    ).run([_boundary_document(["Same", "Same", "Same"])])
+
+    assert any(
+        "boundary[active-topic-limit]" in message
+        for kind, message in reporter.messages
+        if kind == "persist"
+    )
 
 
 def _write_test_png(path: Path) -> None:
@@ -169,7 +283,7 @@ def test_document_digester_writes_topic_files_and_index(tmp_path: Path) -> None:
     assert any("Loaded source.txt with 1 section(s)." == message for message in persisted)
     assert any("Prepared 3 chunk(s) from 1 document(s)." == message for message in persisted)
     assert any("Completed batch 3/3; tracking 1 topic(s)." == message for message in persisted)
-    assert any("marked the current topic cluster as complete" in message for message in persisted)
+    assert any("boundary[end-of-corpus]" in message for message in persisted)
     assert any("Finished digestion with 1 skill file(s)." == message for message in persisted)
     assert any("Generated " in message and "copilot/.github/skills/architecture/SKILL.md" in message for message in persisted)
     assert any("Generated " in message and "copilot/INSTALL.md" in message for message in persisted)
@@ -356,10 +470,10 @@ def test_document_digester_flushes_completed_topics_incrementally(tmp_path: Path
     assert provider.finalize_calls == [["topic-1"], ["topic-2"], ["topic-3"]]
     assert writer.topic_batches == [
         ["topic-1"],
+        ["topic-1", "topic-2"],
+        ["topic-1", "topic-2", "topic-3"],
         ["topic-1"],
         ["topic-2"],
-        ["topic-2"],
-        ["topic-3"],
         ["topic-3"],
     ]
     assert [topic.slug for topic in result.topics] == ["topic-1", "topic-2", "topic-3"]

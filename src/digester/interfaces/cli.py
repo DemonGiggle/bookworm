@@ -118,6 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     digest_parser.add_argument("--max-chunk-tokens", type=int)
     digest_parser.add_argument("--context-window-tokens", type=int)
     digest_parser.add_argument("--reserved-context-tokens", type=int, default=4096)
+    digest_parser.add_argument("--max-active-topic-tokens", type=int, default=12000)
     digest_parser.add_argument("--batch-size", type=int, default=2)
     digest_parser.add_argument("--minimum-batches-before-stop", type=int, default=2)
     digest_parser.add_argument("--max-batches", type=int, default=50)
@@ -314,6 +315,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 minimum_batches_before_stop=args.minimum_batches_before_stop,
                 max_batches=args.max_batches,
                 max_active_topics=args.max_active_topics,
+                max_active_topic_tokens=args.max_active_topic_tokens,
             ),
             image_analyzer=image_analyzer,
             progress_reporter=reporter,

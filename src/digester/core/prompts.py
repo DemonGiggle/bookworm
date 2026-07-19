@@ -43,17 +43,14 @@ _ROUTING_EXAMPLE_GUIDANCE = (
 def build_digest_system_prompt() -> str:
     return (
         "You are a document digestion engine. Read the supplied chunks, update a section-like skill map of the corpus, "
-        "and decide whether the currently visible topics likely need more adjacent chunks before they are complete. Preserve high-value operational detail for downstream coding agents such as Codex, Claude Code, and Copilot, "
+        "and provide an advisory continuity signal for the currently visible topics. The application, not this signal alone, controls topic-cluster boundaries. Preserve high-value operational detail for downstream coding agents such as Codex, Claude Code, and Copilot, "
         "especially setup flows, hardware installation steps, wiring order, firmware or software prerequisites, commands, "
         "configuration values, validation checks, warnings, failure conditions, and recovery notes. "
         f"{_TOPIC_OUTPUT_CONTRACT} "
         f"{_TOPIC_QUALITY_GUIDANCE} "
         f"{_ROUTING_EXAMPLE_GUIDANCE} "
         "Some chunks may be image-analysis content derived from embedded document images; treat those summaries and key points as grounded evidence from the cited image location, not as speculative captions. "
-        "Use should_continue=true when the visible topic still looks incomplete or likely continues in upcoming chunks. "
-        "Use should_continue=false when the visible topics already have strong coverage and the next chunks are more likely to introduce different topics than extend these ones. "
-        "Heuristics for should_continue=false: prefer false when most current chunks do not overlap with the active topics, or when several visible topics already look finalized and the batch is pivoting into a new area. "
-        "When uncertain, prefer should_continue=true so the next adjacent batch can confirm continuity."
+        "Set should_continue only as an advisory signal: true when this batch extends active topics, false when it is internally complete or pivots away from them. Do not predict unseen chunks."
     )
 
 
@@ -93,7 +90,7 @@ def build_digest_user_prompt(request: DigestBatchRequest) -> str:
         "- Return only chunk_id values from New chunks in this batch; use an empty list when no new chunk directly supports a topic. Existing evidence is retained by the application.\n"
         "- Favor detail that helps another engineer or agent reproduce the setup, understand the implementation, or avoid mistakes.\n"
         "- If a candidate topic is still thin, expand it with concrete evidence from this batch instead of returning a placeholder.\n"
-        "- Use should_continue=false when the visible topics look complete and this batch is mostly pivoting into different topics; otherwise prefer true."
+        "- should_continue is advisory only: report whether this batch extends active topics; do not predict unseen chunks."
     ).format(
         batch=request.batch_number,
         total=request.total_batches,
