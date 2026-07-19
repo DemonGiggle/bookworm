@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from digester.core.models import DigestBatchRequest, DigestDecision, TopicDigest
 from digester.images import MockImageAnalyzer
 from digester.interfaces import cli
@@ -77,10 +79,32 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
     assert (output_dir / "opencode" / "INSTALL.md").exists()
     assert (output_dir / "codex" / "INSTALL.md").exists()
     assert "Using provider openai with model fake-model." in captured.err
+    assert 'Resolved model preset: {"batch_size": 2' in captured.err
     assert "Loaded notes.txt with 1 section(s)." in captured.err
     assert "Completed batch 1/1; tracking 1 topic(s)." in captured.err
     assert "Finished digestion with 1 skill file(s)." in captured.err
     assert "Generated" in captured.err
+
+
+def test_cli_rejects_text_only_image_analyzer(tmp_path: Path) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("Notes.", encoding="utf-8")
+
+    with pytest.raises(SystemExit):
+        cli.main(
+            [
+                "digest",
+                str(input_path),
+                "--output-dir",
+                str(tmp_path / "out"),
+                "--model",
+                "text-model",
+                "--image-analyzer-kind",
+                "ollama",
+                "--image-capability",
+                "text-only",
+            ]
+        )
 
 
 def test_cli_digest_command_passes_recursive_directory_flag(monkeypatch, tmp_path: Path, capsys) -> None:

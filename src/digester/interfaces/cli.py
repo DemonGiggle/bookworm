@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Optional, Sequence, TextIO, Tuple
 
 from ..core import DigestConfig
+from ..core.presets import PRESETS, resolve_preset
 from ..images import ImageAnalyzer, ImageAnalyzerSettings, create_image_analyzer
 from ..providers import ProviderSettings, create_provider
 from ..utils.progress import ConsoleProgressReporter
@@ -19,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     digest_parser = subparsers.add_parser("digest", help="Digest source files into markdown artifacts.")
+    digest_parser.add_argument("--preset", choices=sorted(PRESETS), default="legacy")
     digest_parser.add_argument("inputs", nargs="+", help="Input files or directories to digest.")
     digest_parser.add_argument(
         "--recursive",
@@ -72,6 +75,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--image-analyzer-model",
         help="Model name for image analysis. Defaults to --model when image analysis is enabled.",
     )
+    digest_parser.add_argument(
+        "--image-capability",
+        choices=["vision", "text-only"],
+        help="Explicit capability of the configured image analyzer; analyzer selection implies vision unless marked text-only.",
+    )
     verbose_group = digest_parser.add_mutually_exclusive_group()
     verbose_group.add_argument(
         "--verbose",
@@ -99,13 +107,13 @@ def build_parser() -> argparse.ArgumentParser:
     digest_parser.add_argument(
         "--digest-temperature",
         type=float,
-        default=float(os.getenv("BOOKWORM_DIGEST_TEMPERATURE", "0.4")),
+        default=(float(os.environ["BOOKWORM_DIGEST_TEMPERATURE"]) if "BOOKWORM_DIGEST_TEMPERATURE" in os.environ else None),
         help="Sampling temperature for digest-stage text generation.",
     )
     digest_parser.add_argument(
         "--finalize-temperature",
         type=float,
-        default=float(os.getenv("BOOKWORM_FINALIZE_TEMPERATURE", "0.1")),
+        default=(float(os.environ["BOOKWORM_FINALIZE_TEMPERATURE"]) if "BOOKWORM_FINALIZE_TEMPERATURE" in os.environ else None),
         help="Sampling temperature for finalize-stage text generation.",
     )
     digest_parser.add_argument(
@@ -117,9 +125,9 @@ def build_parser() -> argparse.ArgumentParser:
     digest_parser.add_argument("--max-chunk-chars", type=int, default=1800)
     digest_parser.add_argument("--max-chunk-tokens", type=int)
     digest_parser.add_argument("--context-window-tokens", type=int)
-    digest_parser.add_argument("--reserved-context-tokens", type=int, default=4096)
-    digest_parser.add_argument("--max-active-topic-tokens", type=int, default=12000)
-    digest_parser.add_argument("--batch-size", type=int, default=2)
+    digest_parser.add_argument("--reserved-context-tokens", type=int)
+    digest_parser.add_argument("--max-active-topic-tokens", type=int)
+    digest_parser.add_argument("--batch-size", type=int)
     digest_parser.add_argument("--minimum-batches-before-stop", type=int, default=2)
     digest_parser.add_argument("--max-batches", type=int, default=50)
     digest_parser.add_argument(
@@ -127,7 +135,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-topics",
         dest="max_active_topics",
         type=int,
-        default=12,
+        default=None,
         help="Maximum number of recent section-like topics to include in each provider prompt.",
     )
     return parser
@@ -273,6 +281,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command != "digest":
         parser.error("Unknown command.")
 
+    preset = resolve_preset(
+        args.preset,
+        batch_size=args.batch_size,
+        max_chunk_tokens=args.max_chunk_tokens,
+        context_window_tokens=args.context_window_tokens,
+        reserved_context_tokens=args.reserved_context_tokens,
+        max_active_topics=args.max_active_topics,
+        max_active_topic_tokens=args.max_active_topic_tokens,
+        digest_temperature=args.digest_temperature,
+        finalize_temperature=args.finalize_temperature,
+    )
+    for key, value in preset.metadata().items():
+        if hasattr(args, key):
+            setattr(args, key, value)
+    if args.image_analyzer_kind and args.image_capability == "text-only":
+        parser.error("The configured image analyzer is explicitly text-only.")
+
     log_stream = None
     try:
         reporter, log_stream = _build_reporter(args)
@@ -281,6 +306,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
     try:
         reporter.persist(_provider_message(args))
+        reporter.persist(
+            "Resolved model preset: {metadata}".format(
+                metadata=json.dumps(preset.metadata(), sort_keys=True)
+            )
+        )
         image_message = _image_analyzer_message(args)
         if image_message:
             reporter.persist(image_message)

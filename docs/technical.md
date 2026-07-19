@@ -145,6 +145,8 @@ The `merge()` method merges topic updates from successive LLM iterations by:
 
 This is the primary place to tune cost, latency, and recall.
 
+Named `legacy`, `local-26b`, and `frontier` presets resolve these settings together with stage temperatures and output/retry policy. The resolved preset is logged as machine-readable JSON for reproduction; explicit CLI values win over preset defaults. Vision support is represented by explicit analyzer capability rather than model-name inference.
+
 ## 5. Source Ingestion Pipeline
 
 ### 5.1 Registry Dispatch
