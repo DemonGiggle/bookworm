@@ -104,6 +104,10 @@ bookworm digest docs/*.txt \
   --verbose
 ```
 
+Use `--preset local-26b` for conservative local inference defaults (single-chunk batches, 1,024-token chunks, lower temperatures, and smaller active state), or `--preset frontier` for a larger 128k context profile. Every run logs the fully resolved preset as sorted JSON, and individual CLI options override preset values. The default `legacy` preset preserves previous behavior.
+
+Vision capability is tied to explicit image-analyzer configuration, never inferred from a model name. Use `--image-capability text-only` to make an incompatible analyzer selection fail before any request.
+
 If `--ollama-port` is omitted, the CLI defaults to port `11434`.
 Use `--verbose` or `-v` to print organized, truncated request and response previews, total character counts, and round-trip timing for each model call, including embedded image analyzer calls.
 Use `--vv` to log the full request and response bodies without omitting the middle.
