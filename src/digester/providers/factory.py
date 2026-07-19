@@ -24,6 +24,7 @@ class ProviderSettings:
     digest_temperature: float = 0.4
     finalize_temperature: float = 0.1
     finalize_max_output_tokens: int = 4096
+    finalize_review_model: Optional[str] = None
 
 
 def create_provider(settings: ProviderSettings) -> LLMProvider:
@@ -35,6 +36,7 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             digest_temperature=settings.digest_temperature,
             finalize_temperature=settings.finalize_temperature,
             finalize_max_output_tokens=settings.finalize_max_output_tokens,
+            finalize_review_model=settings.finalize_review_model,
         )
     if settings.provider_kind == "openai-compatible":
         return OpenAICompatibleProvider(
@@ -44,6 +46,7 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             digest_temperature=settings.digest_temperature,
             finalize_temperature=settings.finalize_temperature,
             finalize_max_output_tokens=settings.finalize_max_output_tokens,
+            finalize_review_model=settings.finalize_review_model,
         )
     if settings.provider_kind == "opencode-go":
         return OpenCodeGoProvider(
@@ -52,6 +55,7 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             digest_temperature=settings.digest_temperature,
             finalize_temperature=settings.finalize_temperature,
             finalize_max_output_tokens=settings.finalize_max_output_tokens,
+            finalize_review_model=settings.finalize_review_model,
         )
     if settings.provider_kind == "ollama":
         return OllamaProvider(

@@ -39,6 +39,7 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
         digest_temperature: float = 0.4,
         finalize_temperature: float = 0.1,
         finalize_max_output_tokens: int = 4096,
+        finalize_review_model: str = "",
     ) -> None:
         normalized_model = normalize_opencode_go_model(model)
         if normalized_model.lower() in _MESSAGES_ONLY_MODELS:
@@ -58,6 +59,11 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
                 "none" if normalized_model.lower().startswith("kimi-") else None
             ),
             finalize_review_passes=1,
+            finalize_review_model=(
+                normalize_opencode_go_model(finalize_review_model)
+                if finalize_review_model
+                else None
+            ),
         )
 
     def _response_format(

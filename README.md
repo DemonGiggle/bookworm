@@ -123,6 +123,8 @@ bookworm digest docs/*.txt \
 
 This integration currently supports Go models served at the official OpenAI-compatible `/chat/completions` endpoint, including Grok, GLM, Kimi, DeepSeek, and MiMo models. Bookworm uses the Go gateway's native strict JSON Schema response mode for digest and finalization reliability. Models currently served only through the Anthropic-style `/messages` endpoint (MiniMax and Qwen) fail early with an actionable error instead of being sent to the wrong protocol. The live model list can change; consult the official OpenCode Go documentation or its `/models` endpoint.
 
+OpenCode Go performs a final evidence-grounding review after topic finalization. By default the same model reviews its own output. For high-stakes documents, `--finalize-review-model grok-4.5` (or another supported Go chat-completions model) assigns that audit to a different model while reusing the same Go credential.
+
 Vision-capable Go models can also analyze embedded images through the same endpoint:
 
 ```bash

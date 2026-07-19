@@ -418,6 +418,7 @@ def test_create_provider_builds_opencode_go_provider_and_normalizes_model() -> N
             digest_temperature=0.2,
             finalize_temperature=0.0,
             finalize_max_output_tokens=8192,
+            finalize_review_model="grok-4.5",
         )
     )
 
@@ -428,6 +429,7 @@ def test_create_provider_builds_opencode_go_provider_and_normalizes_model() -> N
     assert provider.finalize_temperature == 0.0
     assert provider.finalize_max_output_tokens == 8192
     assert provider.finalize_review_passes == 1
+    assert provider.finalize_review_model == "grok-4.5"
 
 
 def test_opencode_go_uses_strict_json_schema_output() -> None:
@@ -449,6 +451,55 @@ def test_opencode_go_uses_strict_json_schema_output() -> None:
             "schema": schema,
         },
     }
+
+
+def test_opencode_go_uses_distinct_model_for_grounding_review(monkeypatch) -> None:
+    provider = OpenCodeGoProvider(
+        model="kimi-k2.6",
+        api_key="go-key",
+        finalize_review_model="grok-4.5",
+    )
+    request_models = []
+
+    def fake_complete_json(**kwargs):
+        request_models.append(kwargs.get("request_model"))
+        return {
+            "topics": [
+                {
+                    "slug": "overview",
+                    "title": "Overview",
+                    "routing_description": "Use this skill when reviewing grounded guidance.",
+                    "summary": "Grounded summary.",
+                    "key_points": ["Grounded point."],
+                    "workflow_notes": ["Grounded note."],
+                    "reference_chunk_ids": ["source-chunk-1"],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(provider, "_complete_json", fake_complete_json)
+    source_ref = SourceRef(
+        source_id="source",
+        source_path="/tmp/source.txt",
+        locator="full-document",
+    )
+    provider.finalize_topics(
+        [
+            TopicDigest(
+                slug="overview",
+                title="Overview",
+                routing_description="Use this skill when reviewing draft guidance.",
+                summary="Draft summary.",
+                key_points=["Draft point."],
+                references=[source_ref],
+                evidence_chunk_ids=["source-chunk-1"],
+                evidence_refs={"source-chunk-1": source_ref},
+                evidence_texts={"source-chunk-1": "Grounded source text."},
+            )
+        ]
+    )
+
+    assert request_models == [None, "grok-4.5"]
     assert provider.finalize_reasoning_effort == "none"
 
 
