@@ -56,6 +56,9 @@ def test_digest_prompts_preserve_setup_and_hardware_detail() -> None:
     assert "operational rules" in user_prompt
     assert "expand it with concrete evidence from this batch" in user_prompt
     assert "should_continue is advisory only" in user_prompt
+    assert "short single-source, single-subject document" in system_prompt
+    assert "Never emit a broad overview topic" in system_prompt
+    assert "Do not map headings one-to-one" in user_prompt
 
 
 def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
