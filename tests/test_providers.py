@@ -17,10 +17,11 @@ from digester.core.models import (
 from digester.providers import MockLLMProvider, ProviderSettings, create_provider
 from digester.providers.ollama_provider import OllamaProvider, _normalize_base_url
 from digester.providers.openai_provider import OpenAIProvider
-from digester.providers.parsing import parse_finalized_topics
+from digester.providers.parsing import parse_digest_decision, parse_finalized_topics
 from digester.providers.schemas import (
     DIGEST_RESPONSE_SCHEMA,
     FINALIZE_RESPONSE_SCHEMA,
+    schema_with_allowed_chunk_ids,
     validate_payload,
 )
 
@@ -64,7 +65,7 @@ def _valid_finalized_payload():
                 "summary": "A complete overview summary.",
                 "key_points": ["Check the source."],
                 "workflow_notes": ["Validate before reuse."],
-                "references": [],
+                            "reference_chunk_ids": [],
             }
         ]
     }
@@ -101,7 +102,105 @@ def test_digest_decision_rejects_string_boolean() -> None:
     payload["should_continue"] = "false"
 
     with pytest.raises(ValueError, match="must be a JSON boolean"):
-        DigestDecision.from_payload(payload, fallback_refs=[])
+        DigestDecision.from_payload(payload, chunk_refs={})
+
+
+def test_digest_references_resolve_and_dedupe_chunk_ids() -> None:
+    ref = SourceRef(
+        source_id="source",
+        source_path="/tmp/source.txt",
+        locator="section 1",
+    )
+    payload = _valid_digest_payload()
+    payload["topic_updates"] = [
+        {
+            "slug": "overview",
+            "title": "Overview",
+            "routing_description": "Use this skill when reviewing the overview.",
+            "summary": "Summary grounded in a chunk.",
+            "key_points": ["Check the evidence."],
+            "workflow_notes": ["Validate before reuse."],
+            "reference_chunk_ids": ["chunk-1", "chunk-1"],
+        }
+    ]
+
+    decision = parse_digest_decision(payload, chunk_refs={"chunk-1": ref})
+
+    assert decision.topic_updates[0].evidence_chunk_ids == ["chunk-1"]
+    assert decision.topic_updates[0].references == [ref]
+    assert decision.topic_updates[0].evidence_refs == {"chunk-1": ref}
+
+
+@pytest.mark.parametrize("chunk_id", ["unknown-chunk", "previous-batch-chunk"])
+def test_digest_rejects_unknown_or_cross_batch_chunk_ids(chunk_id) -> None:
+    payload = _valid_digest_payload()
+    payload["topic_updates"] = [
+        {
+            "slug": "overview",
+            "title": "Overview",
+            "routing_description": "Use this skill when reviewing the overview.",
+            "summary": "Summary with invalid provenance.",
+            "key_points": [],
+            "workflow_notes": [],
+            "reference_chunk_ids": [chunk_id],
+        }
+    ]
+
+    with pytest.raises(ValueError, match="unknown chunk IDs"):
+        parse_digest_decision(payload, chunk_refs={})
+
+
+def test_digest_missing_evidence_does_not_attach_batch_fallbacks() -> None:
+    unrelated_ref = SourceRef(
+        source_id="source",
+        source_path="/tmp/source.txt",
+        locator="section 1",
+    )
+    payload = _valid_digest_payload()
+    payload["topic_updates"] = [
+        {
+            "slug": "overview",
+            "title": "Overview",
+            "routing_description": "Use this skill when reviewing the overview.",
+            "summary": "Summary without supplied evidence.",
+            "key_points": [],
+            "workflow_notes": [],
+            "reference_chunk_ids": [],
+        }
+    ]
+
+    decision = parse_digest_decision(payload, chunk_refs={"chunk-1": unrelated_ref})
+
+    assert decision.topic_updates[0].references == []
+    assert decision.topic_updates[0].evidence_chunk_ids == []
+
+
+def test_topic_merge_preserves_multi_batch_evidence() -> None:
+    first_ref = SourceRef("source", "/tmp/source.txt", "section 1")
+    second_ref = SourceRef("source", "/tmp/source.txt", "section 2")
+    topic = TopicDigest(
+        slug="overview",
+        title="Overview",
+        summary="First batch.",
+        references=[first_ref],
+        evidence_chunk_ids=["chunk-1"],
+        evidence_refs={"chunk-1": first_ref},
+    )
+
+    topic.merge(
+        TopicDigest(
+            slug="overview",
+            title="Overview",
+            summary="Second batch.",
+            references=[second_ref],
+            evidence_chunk_ids=["chunk-2"],
+            evidence_refs={"chunk-2": second_ref},
+        )
+    )
+
+    assert topic.evidence_chunk_ids == ["chunk-1", "chunk-2"]
+    assert topic.references == [first_ref, second_ref]
+    assert topic.evidence_refs == {"chunk-1": first_ref, "chunk-2": second_ref}
 
 
 def test_openai_retries_schema_validation_failure_and_uses_native_schema(monkeypatch) -> None:
@@ -141,7 +240,71 @@ def test_openai_retries_schema_validation_failure_and_uses_native_schema(monkeyp
     response_format = captured_calls[0]["response_format"]
     assert response_format["type"] == "json_schema"
     assert response_format["json_schema"]["strict"] is True
-    assert response_format["json_schema"]["schema"] == DIGEST_RESPONSE_SCHEMA
+    assert response_format["json_schema"]["schema"] == schema_with_allowed_chunk_ids(
+        DIGEST_RESPONSE_SCHEMA, "topic_updates", []
+    )
+
+
+def test_openai_retries_unknown_chunk_id_with_batch_scoped_schema(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    invalid_payload = _valid_digest_payload()
+    invalid_payload["topic_updates"] = [
+        {
+            "slug": "overview",
+            "title": "Overview",
+            "routing_description": "Use this skill when reviewing the overview.",
+            "summary": "A source-backed overview.",
+            "key_points": [],
+            "workflow_notes": [],
+            "reference_chunk_ids": ["stale-chunk"],
+        }
+    ]
+    valid_payload = json.loads(json.dumps(invalid_payload))
+    valid_payload["topic_updates"][0]["reference_chunk_ids"] = ["chunk-1"]
+    responses = iter([invalid_payload, valid_payload])
+    call_count = 0
+
+    def fake_create(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=json.dumps(next(responses)))
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        provider,
+        "_client",
+        lambda: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))
+        ),
+    )
+    ref = SourceRef("source", "/tmp/source.txt", "section 1")
+
+    decision = provider.digest_batch(
+        DigestBatchRequest(
+            config=DigestConfig(),
+            batch_number=1,
+            total_batches=1,
+            chunk_batch=[
+                ContentChunk(
+                    chunk_id="chunk-1",
+                    source_id="source",
+                    source_path="/tmp/source.txt",
+                    section_heading="Overview",
+                    text="Evidence",
+                    source_ref=ref,
+                )
+            ],
+            current_topics=[],
+        )
+    )
+
+    assert call_count == 2
+    assert decision.topic_updates[0].references == [ref]
 
 
 def test_ollama_rejects_schema_invalid_retry_and_uses_native_schema(monkeypatch) -> None:
@@ -180,7 +343,9 @@ def test_ollama_rejects_schema_invalid_retry_and_uses_native_schema(monkeypatch)
         )
 
     assert len(captured_requests) == 2
-    assert captured_requests[0]["format"] == DIGEST_RESPONSE_SCHEMA
+    assert captured_requests[0]["format"] == schema_with_allowed_chunk_ids(
+        DIGEST_RESPONSE_SCHEMA, "topic_updates", []
+    )
 
 
 def test_create_provider_builds_mock_llm_provider() -> None:
@@ -324,13 +489,7 @@ def test_ollama_provider_digest_batch(monkeypatch) -> None:
                                         "summary": "Condenses the current source.",
                                         "key_points": ["Uses Ollama locally"],
                                         "workflow_notes": ["Validate the local model output before reuse."],
-                                        "references": [
-                                            {
-                                                "source_id": "source",
-                                                "source_path": "/tmp/source.txt",
-                                                "locator": "full-document",
-                                            }
-                                        ],
+                                            "reference_chunk_ids": [],
                                     }
                                 ],
                                 "should_continue": False,
@@ -394,7 +553,7 @@ def test_ollama_provider_uses_stage_specific_temperatures(monkeypatch) -> None:
                             "summary": "Summary.",
                             "key_points": ["Point"],
                             "workflow_notes": ["Note"],
-                            "references": [],
+                                "reference_chunk_ids": [],
                         }
                     ]
                 }
@@ -570,19 +729,19 @@ def test_digest_decision_coerces_text_fields_without_character_splitting() -> No
                     "summary": "Condenses the batch source.",
                     "key_points": ["c", "h", "e", "c", "k"],
                     "workflow_notes": "Validate the generated guidance before editing.",
-                    "references": [],
+                    "reference_chunk_ids": ["source-chunk-1"],
                 }
             ],
             "should_continue": False,
             "rationale": "Done.",
         },
-        fallback_refs=[
-            SourceRef(
-                source_id="source",
-                source_path="/tmp/source.txt",
-                locator="full-document",
-            )
-        ],
+            chunk_refs={
+                "source-chunk-1": SourceRef(
+                    source_id="source",
+                    source_path="/tmp/source.txt",
+                    locator="full-document",
+                )
+            },
     )
 
     assert decision.topic_updates[0].key_points == ["check"]
@@ -591,7 +750,7 @@ def test_digest_decision_coerces_text_fields_without_character_splitting() -> No
     ]
 
 
-def test_parse_finalized_topics_restores_missing_references_from_fallback_topic() -> None:
+def test_parse_finalized_topics_resolves_chunk_ids_from_fallback_topic() -> None:
     fallback_ref = SourceRef(
         source_id="source",
         source_path="/tmp/source.txt",
@@ -608,7 +767,7 @@ def test_parse_finalized_topics_restores_missing_references_from_fallback_topic(
                     "summary": "Condenses the finalized source into reusable implementation guidance.",
                     "key_points": ["Check the finalized guidance before editing."],
                     "workflow_notes": ["Validate the cited source before applying the workflow."],
-                    "references": [],
+                    "reference_chunk_ids": ["source-chunk-1"],
                 }
             ]
         },
@@ -620,6 +779,8 @@ def test_parse_finalized_topics_restores_missing_references_from_fallback_topic(
                 summary="Draft summary",
                 key_points=[],
                 references=[fallback_ref],
+                evidence_chunk_ids=["source-chunk-1"],
+                evidence_refs={"source-chunk-1": fallback_ref},
             )
         ],
     )
@@ -638,7 +799,7 @@ def test_parse_finalized_topics_treats_null_routing_description_as_empty_string(
                     "summary": "Condenses the finalized source.",
                     "key_points": ["Check the finalized guidance before editing."],
                     "workflow_notes": [],
-                    "references": [],
+                            "reference_chunk_ids": [],
                 }
             ]
         }
@@ -840,7 +1001,7 @@ def test_openai_provider_uses_stage_specific_temperatures(monkeypatch) -> None:
                         "summary": "Summary.",
                         "key_points": ["Point"],
                         "workflow_notes": ["Note"],
-                        "references": [],
+                        "reference_chunk_ids": [],
                     }
                 ]
             }

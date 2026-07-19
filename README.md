@@ -13,6 +13,7 @@ Generated `SKILL.md` files preserve dedicated skill-routing data instead of infe
 - source files and source references
 
 Before export, Bookworm validates finalized topics so weak routing text, thin workflow guidance, or missing references fail explicitly instead of quietly producing low-signal skills.
+Models cite evidence with batch-local `chunk_id` values. Bookworm resolves those IDs to canonical source paths and locators in application code, rejects unknown IDs, and never fills missing evidence by assigning every source in a batch.
 
 By default, each run writes three directories beneath the chosen output directory:
 

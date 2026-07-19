@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Mapping, Optional, Sequence
 
 from ..core.models import DigestDecision, SourceRef, TopicDigest, coerce_text_list
 
 
 def parse_digest_decision(
     payload: Dict[str, object],
-    fallback_refs: Sequence[SourceRef],
+    chunk_refs: Mapping[str, SourceRef],
 ) -> DigestDecision:
-    return DigestDecision.from_payload(payload, fallback_refs=fallback_refs)
+    return DigestDecision.from_payload(payload, chunk_refs=dict(chunk_refs))
 
 
 def _parse_source_refs(raw_refs: object) -> List[SourceRef]:
@@ -35,8 +35,8 @@ def parse_finalized_topics(
     if not isinstance(finalized, list):
         raise ValueError("Finalized topic payload must contain a topics list.")
 
-    fallback_refs_by_slug = {
-        topic.slug: list(topic.references)
+    fallback_topics_by_slug = {
+        topic.slug: topic
         for topic in fallback_topics or []
     }
     result: List[TopicDigest] = []
@@ -44,9 +44,39 @@ def parse_finalized_topics(
         if not isinstance(raw_topic, dict):
             continue
         slug = str(raw_topic.get("slug", "")).strip()
-        refs = _parse_source_refs(raw_topic.get("references", []))
-        if not refs:
-            refs = fallback_refs_by_slug.get(slug, [])
+        fallback_topic = fallback_topics_by_slug.get(slug)
+        raw_chunk_ids = raw_topic.get("reference_chunk_ids")
+        if raw_chunk_ids is None:
+            refs = _parse_source_refs(raw_topic.get("references", []))
+            chunk_ids = list(fallback_topic.evidence_chunk_ids) if fallback_topic else []
+        else:
+            if not isinstance(raw_chunk_ids, list):
+                raise ValueError("Finalized topic reference_chunk_ids must be a list.")
+            chunk_ids = list(
+                dict.fromkeys(
+                    str(chunk_id).strip()
+                    for chunk_id in raw_chunk_ids
+                    if str(chunk_id).strip()
+                )
+            )
+            allowed_ids = set(fallback_topic.evidence_chunk_ids) if fallback_topic else set()
+            unknown_ids = [chunk_id for chunk_id in chunk_ids if chunk_id not in allowed_ids]
+            if unknown_ids:
+                raise ValueError(
+                    "Finalized topic referenced unknown chunk IDs: {ids}.".format(
+                        ids=", ".join(unknown_ids)
+                    )
+                )
+            evidence_refs = fallback_topic.evidence_refs if fallback_topic else {}
+            refs = []
+            for chunk_id in chunk_ids:
+                ref = evidence_refs.get(chunk_id)
+                if ref is not None and ref not in refs:
+                    refs.append(ref)
+        if raw_chunk_ids is None:
+            evidence_refs = (
+                dict(fallback_topic.evidence_refs) if fallback_topic else {}
+            )
         result.append(
             TopicDigest(
                 slug=slug,
@@ -58,6 +88,12 @@ def parse_finalized_topics(
                 key_points=coerce_text_list(raw_topic.get("key_points", [])),
                 workflow_notes=coerce_text_list(raw_topic.get("workflow_notes", [])),
                 references=refs,
+                evidence_chunk_ids=chunk_ids,
+                evidence_refs={
+                    chunk_id: evidence_refs[chunk_id]
+                    for chunk_id in chunk_ids
+                    if chunk_id in evidence_refs
+                },
             )
         )
     parsed_topics = [topic for topic in result if topic.slug and topic.title]

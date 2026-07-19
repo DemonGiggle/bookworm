@@ -19,6 +19,7 @@ from .parsing import parse_digest_decision, parse_finalized_topics
 from .schemas import (
     DIGEST_RESPONSE_SCHEMA,
     FINALIZE_RESPONSE_SCHEMA,
+    schema_with_allowed_chunk_ids,
     validate_payload,
 )
 
@@ -172,6 +173,11 @@ class OllamaProvider(LLMProvider):
         return validate_payload(retry_payload, response_schema, schema_name)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
+        response_schema = schema_with_allowed_chunk_ids(
+            DIGEST_RESPONSE_SCHEMA,
+            "topic_updates",
+            (chunk.chunk_id for chunk in request.chunk_batch),
+        )
         payload = self._complete_json(
             system_prompt=build_digest_system_prompt(),
             user_prompt=build_digest_user_prompt(request),
@@ -184,28 +190,31 @@ class OllamaProvider(LLMProvider):
                         "summary": "Summarizes the example workflow and its constraints.",
                         "key_points": ["Follow the example workflow in order."],
                         "workflow_notes": ["Validate the example output before reuse."],
-                        "references": [
-                            {
-                                "source_id": "example-source",
-                                "source_path": "/tmp/example-source.txt",
-                                "locator": "section 1",
-                            }
-                        ],
+                        "reference_chunk_ids": ["example-source-chunk-1"],
                     }
                 ],
                 "should_continue": False,
                 "rationale": "Example rationale.",
             },
             temperature=self.digest_temperature,
-            response_schema=DIGEST_RESPONSE_SCHEMA,
+            response_schema=response_schema,
             schema_name="bookworm_digest_response",
         )
-        fallback_refs = [chunk.source_ref for chunk in request.chunk_batch]
-        return parse_digest_decision(payload, fallback_refs=fallback_refs)
+        chunk_refs = {chunk.chunk_id: chunk.source_ref for chunk in request.chunk_batch}
+        return parse_digest_decision(payload, chunk_refs=chunk_refs)
 
     def finalize_topics(self, topics: List[TopicDigest]) -> List[TopicDigest]:
         if not topics:
             return []
+        response_schema = schema_with_allowed_chunk_ids(
+            FINALIZE_RESPONSE_SCHEMA,
+            "topics",
+            (
+                chunk_id
+                for topic in topics
+                for chunk_id in topic.evidence_chunk_ids
+            ),
+        )
         payload = self._complete_json(
             system_prompt=build_finalize_system_prompt(),
             user_prompt=build_finalize_user_prompt(topics),
@@ -218,18 +227,12 @@ class OllamaProvider(LLMProvider):
                         "summary": "Summarizes the finalized example workflow and its constraints.",
                         "key_points": ["Follow the finalized example workflow in order."],
                         "workflow_notes": ["Validate the finalized example output before reuse."],
-                        "references": [
-                            {
-                                "source_id": "example-source",
-                                "source_path": "/tmp/example-source.txt",
-                                "locator": "section 1",
-                            }
-                        ],
+                        "reference_chunk_ids": ["example-source-chunk-1"],
                     }
                 ]
             },
             temperature=self.finalize_temperature,
-            response_schema=FINALIZE_RESPONSE_SCHEMA,
+            response_schema=response_schema,
             schema_name="bookworm_finalize_response",
         )
         return parse_finalized_topics(payload, fallback_topics=topics)
