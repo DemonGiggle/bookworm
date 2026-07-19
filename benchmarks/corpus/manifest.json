@@ -1,0 +1,13 @@
+{
+  "revision": "bookworm-public-v1",
+  "license": "CC0-1.0; synthetic fixtures authored for this repository",
+  "files": ["operations.md", "device-config.txt"],
+  "expectations": {
+    "topics": [
+      {"match_any": ["operations", "backup"], "source_paths": ["operations.md"]},
+      {"match_any": ["device config", "device-config", "i2c"], "source_paths": ["device-config.txt"]}
+    ],
+    "actionable_details": ["sha256", "systemctl restart sensor-agent", "400 khz"],
+    "unsupported_terms": ["factory reset is mandatory", "upload credentials"]
+  }
+}
