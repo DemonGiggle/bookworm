@@ -180,6 +180,28 @@ def test_active_topic_limit_forces_machine_readable_boundary() -> None:
     )
 
 
+def test_active_token_limit_uses_configured_counter() -> None:
+    reporter = RecordingReporter()
+    provider = BoundaryProvider(advisory=True)
+
+    DigestOrchestrator(
+        provider=provider,
+        config=DigestConfig(
+            batch_size=1,
+            minimum_batches_before_stop=1,
+            max_active_topic_tokens=10,
+            token_counter=lambda text: len(text),
+        ),
+        progress_reporter=reporter,
+    ).run([_boundary_document(["Same", "Same"])])
+
+    assert any(
+        "boundary[active-token-limit]" in message
+        for kind, message in reporter.messages
+        if kind == "persist"
+    )
+
+
 def _write_test_png(path: Path) -> None:
     path.write_bytes(
         b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jK4QAAAAASUVORK5CYII=")

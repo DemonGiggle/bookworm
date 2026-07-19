@@ -11,7 +11,6 @@ def test_local_26b_preset_uses_conservative_defaults() -> None:
     assert preset.max_active_topics == 6
     assert preset.digest_temperature == 0.15
     assert preset.finalize_temperature == 0.0
-    assert preset.finalize_group_size == 1
 
 
 def test_frontier_preset_and_individual_overrides_are_reproducible() -> None:

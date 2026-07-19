@@ -203,7 +203,7 @@ class TopicDigest:
 
 @dataclass
 class DigestConfig:
-    max_chunk_chars: int = 1800
+    max_chunk_chars: Optional[int] = 1800
     max_chunk_tokens: Optional[int] = None
     context_window_tokens: Optional[int] = None
     reserved_context_tokens: int = 4096
@@ -218,7 +218,7 @@ class DigestConfig:
     def __post_init__(self) -> None:
         if self.max_topics is not None:
             self.max_active_topics = self.max_topics
-        if self.max_chunk_chars <= 0:
+        if self.max_chunk_chars is not None and self.max_chunk_chars <= 0:
             raise ValueError("max_chunk_chars must be positive.")
         if self.batch_size <= 0:
             raise ValueError("batch_size must be positive.")
@@ -301,9 +301,9 @@ class DigestDecision:
                         evidence_chunk_ids=chunk_ids,
                         evidence_refs={chunk_id: chunk_refs[chunk_id] for chunk_id in chunk_ids},
                         evidence_texts={
-                            chunk_id: (chunk_texts or {}).get(chunk_id, "")
+                            chunk_id: chunk_texts[chunk_id]
                             for chunk_id in chunk_ids
-                            if (chunk_texts or {}).get(chunk_id, "")
+                            if chunk_texts and chunk_texts.get(chunk_id)
                         },
                     )
                 )

@@ -15,9 +15,6 @@ class ModelPreset:
     max_active_topic_tokens: int
     digest_temperature: float
     finalize_temperature: float
-    finalize_output_tokens: int = 4096
-    structured_output_retries: int = 1
-    finalize_group_size: int = 1
 
     def metadata(self) -> Dict[str, object]:
         return asdict(self)

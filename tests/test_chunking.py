@@ -117,6 +117,16 @@ def test_chunker_accepts_provider_specific_token_counter() -> None:
     assert [len(chunk.text) for chunk in chunks] == [10, 10, 10, 5]
 
 
+def test_digest_config_allows_disabling_character_budget() -> None:
+    config = DigestConfig(max_chunk_chars=None, max_chunk_tokens=20)
+
+    assert config.max_chunk_chars is None
+
+
+def test_token_estimator_handles_lone_surrogates() -> None:
+    assert estimate_tokens("valid\ud800text") > 0
+
+
 @pytest.mark.parametrize(
     ("context_window", "reserved", "batch_size", "expected"),
     [
