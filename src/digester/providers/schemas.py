@@ -44,7 +44,7 @@ DIGEST_RESPONSE_SCHEMA = {
 FINALIZE_RESPONSE_SCHEMA = {
     "type": "object",
     "properties": {
-        "topics": {"type": "array", "items": TOPIC_SCHEMA, "minItems": 1},
+        "topics": {"type": "array", "items": TOPIC_SCHEMA},
     },
     "required": ["topics"],
     "additionalProperties": False,

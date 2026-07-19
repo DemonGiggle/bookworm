@@ -12,7 +12,7 @@ def estimate_tokens(text: str) -> int:
     """Conservatively estimate tokens when a model tokenizer is unavailable."""
     if not text:
         return 0
-    return max(1, (len(text.encode("utf-8")) + 2) // 3)
+    return max(1, (len(text.encode("utf-8", errors="replace")) + 2) // 3)
 
 
 def _within_budget(
@@ -37,8 +37,16 @@ def _hard_split(
     pieces: List[str] = []
     remaining = text
     while remaining:
-        low = 1
-        high = len(remaining)
+        high = 1
+        while high <= len(remaining) and _within_budget(
+            remaining[:high],
+            max_chunk_chars,
+            max_chunk_tokens,
+            token_counter,
+        ):
+            high *= 2
+        low = max(1, high // 2)
+        high = min(high, len(remaining))
         best = 0
         while low <= high:
             middle = (low + high) // 2

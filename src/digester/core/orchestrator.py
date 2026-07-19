@@ -134,8 +134,9 @@ class DigestOrchestrator:
             active_topic_slugs.clear()
 
         def active_state_tokens() -> int:
+            counter = self.config.token_counter or estimate_tokens
             return sum(
-                estimate_tokens(
+                counter(
                     "\n".join(
                         [
                             topic.title,
@@ -149,7 +150,7 @@ class DigestOrchestrator:
                 for topic in topic_map.values()
             )
 
-        def boundary_reason(batch_index: int, decision) -> Optional[str]:
+        def boundary_reason(batch_index: int, decision, current_batch) -> Optional[str]:
             if len(topic_map) >= self.config.max_active_topics:
                 return "active-topic-limit"
             if active_state_tokens() >= self.config.max_active_topic_tokens:
@@ -158,9 +159,6 @@ class DigestOrchestrator:
             next_batch = chunks[next_start : next_start + self.config.batch_size]
             if not next_batch:
                 return None
-            current_batch = chunks[
-                batch_index * self.config.batch_size : (batch_index + 1) * self.config.batch_size
-            ]
             current_sources = {chunk.source_id for chunk in current_batch}
             next_sources = {chunk.source_id for chunk in next_batch}
             if current_sources.isdisjoint(next_sources):
@@ -219,7 +217,7 @@ class DigestOrchestrator:
                 )
                 if topic_map and on_topics_updated is not None:
                     on_topics_updated(list(topic_map.values()))
-                reason = boundary_reason(batch_index, decision)
+                reason = boundary_reason(batch_index, decision, chunk_batch)
                 if reason and batch_index + 1 >= self.config.minimum_batches_before_stop:
                     flush_topic_cluster(
                         "boundary[{reason}] batch={current}/{total} advisory_should_continue={advisory} rationale={rationale}".format(
