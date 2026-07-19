@@ -94,6 +94,9 @@ def test_finalize_prompts_request_richer_markdown_ready_output() -> None:
     assert "setup flow, operational nuance, and important edge cases" in user_prompt
     assert '"reference_chunk_ids": [\n      "setup-guide-chunk-1"' in user_prompt
     assert "Return the complete supplied reference_chunk_ids list" in user_prompt
+    assert "omit plausible advice or consequences" in user_prompt
+    assert "evidence snippets are authoritative" in system_prompt
+    assert "Do not invent failure effects" in system_prompt
     assert '"source_path": "/tmp/setup-guide.txt"' not in user_prompt
     assert '"locator": "section 2"' not in user_prompt
     payload = json.loads(user_prompt[user_prompt.index("[") :])

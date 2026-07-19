@@ -106,7 +106,10 @@ def build_finalize_system_prompt() -> str:
         f"{_TOPIC_OUTPUT_CONTRACT} "
         f"{_TOPIC_QUALITY_GUIDANCE} "
         f"{_ROUTING_EXAMPLE_GUIDANCE} "
-        "Refine only from the supplied topic data and evidence snippets; do not add facts that are not present. Produce rich markdown-ready summaries that keep the most useful implementation and setup detail. Each topic should read like a reusable skill file for coding agents such as Codex, Claude Code, and Copilot. "
+        "The evidence snippets are authoritative; treat draft topic wording only as an organizational aid. "
+        "Keep a draft claim only when it can be directly verified in the supplied evidence, and remove or narrow unsupported wording. "
+        "Do not invent failure effects, prohibitions, best practices, causal explanations, diagnostic conclusions, or extrapolated lifetime/capacity claims, even when they seem technically plausible. "
+        "Do not silently repair ambiguous or inconsistent source wording into a new technical claim. Produce rich markdown-ready summaries that keep the most useful directly supported implementation and setup detail. Each topic should read like a reusable skill file for coding agents such as Codex, Claude Code, and Copilot. "
         "Do not collapse away hardware setup flows, ordered procedures, commands, prerequisites, warnings, validation checks, or troubleshooting notes. "
         "Preserve every supplied reference_chunk_id in the finalized topic; these IDs are the accumulated grounding for facts already present in the draft. "
         "Remove duplication, but preserve concrete facts and enough detail that another LLM or engineer could act on the output without rereading the whole source."
@@ -165,6 +168,7 @@ def build_finalize_user_prompt(topics: Sequence[TopicDigest]) -> str:
     ]
     prefix = (
         "Finalize this topic for markdown export. Refine weak wording only from the supplied facts and evidence snippets. "
+        "Audit every output sentence against the evidence snippets; omit plausible advice or consequences that the evidence does not state. "
         "Make routing_description strong enough for a frontmatter description and When To Use section. "
         "Make workflow_notes capture validation checks, caveats, and source-backed operating guidance. "
         "Return the complete supplied reference_chunk_ids list; do not discard accumulated evidence while retaining draft facts. "
