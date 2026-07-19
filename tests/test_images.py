@@ -90,6 +90,52 @@ def test_create_image_analyzer_builds_opencode_go_analyzer() -> None:
     assert analyzer.model == "kimi-k2.6"
     assert analyzer._client_provider.base_url == "https://opencode.ai/zen/go/v1"
     assert analyzer._client_provider.api_key == "go-key"
+    assert analyzer.validate_model is False
+
+
+def test_compatible_image_analyzers_skip_native_model_retrieve(monkeypatch) -> None:
+    for analyzer_kind, base_url in (
+        ("openai-compatible", "https://compatible.example/v1"),
+        ("opencode-go", None),
+    ):
+        analyzer = create_image_analyzer(
+            ImageAnalyzerSettings(
+                analyzer_kind=analyzer_kind,
+                model="kimi-k2.6",
+                api_key="test-key",
+                base_url=base_url,
+            )
+        )
+        called = []
+        monkeypatch.setattr(
+            analyzer._client_provider,
+            "validate_configuration",
+            lambda: called.append(True),
+        )
+
+        analyzer.validate_configuration()
+
+        assert called == []
+
+
+def test_native_openai_image_analyzer_keeps_model_validation(monkeypatch) -> None:
+    analyzer = create_image_analyzer(
+        ImageAnalyzerSettings(
+            analyzer_kind="openai",
+            model="gpt-4.1-mini",
+            api_key="test-key",
+        )
+    )
+    called = []
+    monkeypatch.setattr(
+        analyzer._client_provider,
+        "validate_configuration",
+        lambda: called.append(True),
+    )
+
+    analyzer.validate_configuration()
+
+    assert called == [True]
 
 
 def test_opencode_go_image_analyzer_sends_multimodal_chat_request(monkeypatch) -> None:

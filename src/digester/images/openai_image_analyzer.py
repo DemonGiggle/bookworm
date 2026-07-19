@@ -67,10 +67,12 @@ class OpenAIImageAnalyzer(ImageAnalyzer):
         base_url: Optional[str] = None,
         organization: Optional[str] = None,
         temperature: float = 0.0,
+        validate_model: bool = True,
     ) -> None:
         super().__init__()
         self.model = model
         self.temperature = temperature
+        self.validate_model = validate_model
         self._client_provider = OpenAIProvider(
             model=model,
             api_key=api_key,
@@ -83,7 +85,8 @@ class OpenAIImageAnalyzer(ImageAnalyzer):
         self._client_provider.set_progress_reporter(progress_reporter)
 
     def validate_configuration(self) -> None:
-        self._client_provider.validate_configuration()
+        if self.validate_model:
+            self._client_provider.validate_configuration()
 
     def analyze(self, image: EmbeddedImage) -> ImageAnalysis:
         system_prompt = _build_image_system_prompt()
