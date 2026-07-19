@@ -16,6 +16,11 @@ from ..core.prompts import (
 )
 from .base import LLMProvider
 from .parsing import parse_digest_decision, parse_finalized_topics
+from .schemas import (
+    DIGEST_RESPONSE_SCHEMA,
+    FINALIZE_RESPONSE_SCHEMA,
+    validate_payload,
+)
 
 
 def _normalize_base_url(host: str, port: int) -> str:
@@ -54,13 +59,19 @@ class OllamaProvider(LLMProvider):
         self.digest_temperature = digest_temperature
         self.finalize_temperature = finalize_temperature
 
-    def _request_content(self, system_prompt: str, user_prompt: str, temperature: float) -> str:
+    def _request_content(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        response_schema: Dict[str, object],
+    ) -> str:
         self._log_request("Ollama", self.model, system_prompt, user_prompt)
         payload = json.dumps(
             {
                 "model": self.model,
                 "stream": False,
-                "format": "json",
+                "format": response_schema,
                 "options": {"temperature": temperature},
                 "messages": [
                     {"role": "system", "content": system_prompt},
@@ -119,19 +130,27 @@ class OllamaProvider(LLMProvider):
         user_prompt: str,
         retry_example_payload: Optional[Dict[str, object]] = None,
         temperature: float = 0,
+        response_schema: Optional[Dict[str, object]] = None,
+        schema_name: str = "bookworm_response",
     ) -> Dict[str, object]:
+        if response_schema is None:
+            response_schema = {"type": "object"}
         content = self._request_content(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=temperature,
+            response_schema=response_schema,
         )
         try:
-            return self._parse_json_response("Ollama", self.model, content)
+            payload = self._parse_json_response("Ollama", self.model, content)
+            return validate_payload(payload, response_schema, schema_name)
         except ValueError as error:
-            if "invalid JSON in the model response" not in str(error):
-                raise
+            first_error = error
         self.progress_reporter.verbose(
-            "Verbose: Ollama returned malformed JSON; retrying once with a stricter JSON-only instruction and a compact schema example."
+            (
+                "Verbose: Ollama returned invalid structured output; retrying once with a "
+                "stricter JSON-only instruction and a compact schema example. Error: {error}"
+            ).format(error=first_error)
         )
         if retry_example_payload is None:
             retry_system_prompt = (
@@ -147,8 +166,10 @@ class OllamaProvider(LLMProvider):
             system_prompt=retry_system_prompt,
             user_prompt=user_prompt,
             temperature=temperature,
+            response_schema=response_schema,
         )
-        return self._parse_json_response("Ollama", self.model, retry_content)
+        retry_payload = self._parse_json_response("Ollama", self.model, retry_content)
+        return validate_payload(retry_payload, response_schema, schema_name)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         payload = self._complete_json(
@@ -176,6 +197,8 @@ class OllamaProvider(LLMProvider):
                 "rationale": "Example rationale.",
             },
             temperature=self.digest_temperature,
+            response_schema=DIGEST_RESPONSE_SCHEMA,
+            schema_name="bookworm_digest_response",
         )
         fallback_refs = [chunk.source_ref for chunk in request.chunk_batch]
         return parse_digest_decision(payload, fallback_refs=fallback_refs)
@@ -206,5 +229,7 @@ class OllamaProvider(LLMProvider):
                 ]
             },
             temperature=self.finalize_temperature,
+            response_schema=FINALIZE_RESPONSE_SCHEMA,
+            schema_name="bookworm_finalize_response",
         )
         return parse_finalized_topics(payload, fallback_topics=topics)
