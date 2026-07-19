@@ -114,11 +114,12 @@ def score_result(result: DigestResult, expectations: Dict[str, object]) -> Dict[
 
 def _run_once(candidate: Candidate, corpus_paths: Sequence[Path], output_dir: Path) -> Tuple[DigestResult, float]:
     preset = resolve_preset(candidate.preset)
+    api_key_env = "OPENCODE_API_KEY" if candidate.provider == "opencode-go" else "OPENAI_API_KEY"
     provider = create_provider(
         ProviderSettings(
             provider_kind=candidate.provider,
             model=candidate.model,
-            api_key=os.getenv("OPENAI_API_KEY", ""),
+            api_key=os.getenv(api_key_env, ""),
             base_url=os.getenv("DIGESTER_BASE_URL") or None,
             organization=os.getenv("OPENAI_ORG_ID") or None,
             ollama_host=os.getenv("OLLAMA_HOST", "127.0.0.1"),

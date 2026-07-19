@@ -1,9 +1,15 @@
 import json
+from types import SimpleNamespace
 from urllib.error import URLError
 
 import pytest
 
-from digester.images import MockImageAnalyzer, OllamaImageAnalyzer, create_image_analyzer
+from digester.images import (
+    MockImageAnalyzer,
+    OllamaImageAnalyzer,
+    OpenAIImageAnalyzer,
+    create_image_analyzer,
+)
 from digester.images.factory import ImageAnalyzerSettings
 from digester.core.models import EmbeddedImage, SourceRef
 
@@ -69,6 +75,67 @@ def test_create_image_analyzer_passes_temperature() -> None:
 
     assert isinstance(analyzer, OllamaImageAnalyzer)
     assert analyzer.temperature == 0.25
+
+
+def test_create_image_analyzer_builds_opencode_go_analyzer() -> None:
+    analyzer = create_image_analyzer(
+        ImageAnalyzerSettings(
+            analyzer_kind="opencode-go",
+            model="opencode-go/kimi-k2.6",
+            api_key="go-key",
+        )
+    )
+
+    assert isinstance(analyzer, OpenAIImageAnalyzer)
+    assert analyzer.model == "kimi-k2.6"
+    assert analyzer._client_provider.base_url == "https://opencode.ai/zen/go/v1"
+    assert analyzer._client_provider.api_key == "go-key"
+
+
+def test_opencode_go_image_analyzer_sends_multimodal_chat_request(monkeypatch) -> None:
+    analyzer = create_image_analyzer(
+        ImageAnalyzerSettings(
+            analyzer_kind="opencode-go",
+            model="kimi-k2.6",
+            api_key="go-key",
+        )
+    )
+    captured = {}
+
+    def fake_create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {"summary": "A red square is visible.", "key_points": ["Red"]}
+                        )
+                    )
+                )
+            ]
+        )
+
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))
+    )
+    monkeypatch.setattr(analyzer._client_provider, "_client", lambda: fake_client)
+
+    result = analyzer.analyze(
+        EmbeddedImage(
+            image_id="red-square",
+            source_ref=SourceRef("fixture", "/tmp/red.png", "image 1"),
+            filename="red.png",
+            mime_type="image/png",
+            data=b"png-bytes",
+        )
+    )
+
+    assert captured["model"] == "kimi-k2.6"
+    image_part = captured["messages"][1]["content"][1]
+    assert image_part["type"] == "image_url"
+    assert image_part["image_url"]["url"].startswith("data:image/png;base64,")
+    assert result.summary == "A red square is visible."
 
 
 def test_mock_image_analyzer_preserves_caption_and_context() -> None:

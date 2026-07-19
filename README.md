@@ -56,6 +56,7 @@ Bookworm's Python package dependencies are installed from `pyproject.toml`. Embe
 
 - `openai`: hosted OpenAI models
 - `openai-compatible`: local or self-hosted models that expose an OpenAI-compatible API
+- `opencode-go`: OpenCode Go models exposed through its OpenAI-compatible chat-completions API
 - `ollama`: local Ollama server via `http://<host>:<port>/api/chat`
 - `mock-llm`: deterministic fake output for fast end-to-end validation without a real LLM call
 
@@ -105,6 +106,35 @@ bookworm digest docs/*.txt \
 ```
 
 Use `--preset local-26b` for conservative local inference defaults (single-chunk batches, 1,024-token chunks, lower temperatures, and smaller active state), or `--preset frontier` for a larger 128k context profile. Every run logs the fully resolved preset as sorted JSON, and individual CLI options override preset values. The default `legacy` preset preserves previous behavior.
+
+## OpenCode Go example
+
+Subscribe to OpenCode Go, copy its API key, and set `OPENCODE_API_KEY`. Bookworm selects the official Go endpoint automatically, so `--base-url` is not required. Both the raw API model ID and OpenCode's prefixed form are accepted.
+
+```bash
+export OPENCODE_API_KEY=your-go-api-key
+
+bookworm digest docs/*.txt \
+  --output-dir out \
+  --provider-kind opencode-go \
+  --model opencode-go/kimi-k3 \
+  --preset frontier
+```
+
+This integration currently supports Go models served at the official OpenAI-compatible `/chat/completions` endpoint, including Grok, GLM, Kimi, DeepSeek, and MiMo models. Models currently served only through the Anthropic-style `/messages` endpoint (MiniMax and Qwen) fail early with an actionable error instead of being sent to the wrong protocol. The live model list can change; consult the official OpenCode Go documentation or its `/models` endpoint.
+
+Vision-capable Go models can also analyze embedded images through the same endpoint:
+
+```bash
+bookworm digest docs/*.pdf \
+  --output-dir out \
+  --provider-kind opencode-go \
+  --model kimi-k2.6 \
+  --image-analyzer-kind opencode-go \
+  --image-analyzer-model kimi-k2.6
+```
+
+Image support varies by model and gateway version; Bookworm sends the multimodal request but does not assume every Go model can accept it. When text and image providers use different credentials, pass `--image-api-key-file` or `--image-api-key-env`. Without image-specific options, explicit primary key options remain shared for backward compatibility; otherwise each provider uses its default environment variable (`OPENCODE_API_KEY` or `OPENAI_API_KEY`).
 
 Vision capability is tied to explicit image-analyzer configuration, never inferred from a model name. Use `--image-capability text-only` to make an incompatible analyzer selection fail before any request.
 

@@ -6,6 +6,7 @@ from typing import Optional
 from .base import LLMProvider
 from .mock_llm_provider import MockLLMProvider
 from .ollama_provider import OllamaProvider
+from .opencode_go_provider import OpenCodeGoProvider
 from .openai_compatible import OpenAICompatibleProvider
 from .openai_provider import OpenAIProvider
 
@@ -38,6 +39,13 @@ def create_provider(settings: ProviderSettings) -> LLMProvider:
             model=settings.model,
             api_key=settings.api_key,
             base_url=settings.base_url or "",
+            digest_temperature=settings.digest_temperature,
+            finalize_temperature=settings.finalize_temperature,
+        )
+    if settings.provider_kind == "opencode-go":
+        return OpenCodeGoProvider(
+            model=settings.model,
+            api_key=settings.api_key,
             digest_temperature=settings.digest_temperature,
             finalize_temperature=settings.finalize_temperature,
         )

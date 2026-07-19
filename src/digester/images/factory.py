@@ -7,6 +7,7 @@ from .base import ImageAnalyzer
 from .mock_image_analyzer import MockImageAnalyzer
 from .ollama_image_analyzer import OllamaImageAnalyzer
 from .openai_image_analyzer import OpenAIImageAnalyzer
+from ..providers.opencode_go_provider import OPENCODE_GO_BASE_URL, normalize_opencode_go_model
 
 
 @dataclass
@@ -38,6 +39,13 @@ def create_image_analyzer(settings: ImageAnalyzerSettings) -> ImageAnalyzer:
             api_key=settings.api_key,
             base_url=settings.base_url,
             organization=settings.organization,
+            temperature=settings.temperature,
+        )
+    if settings.analyzer_kind == "opencode-go":
+        return OpenAIImageAnalyzer(
+            model=normalize_opencode_go_model(settings.model),
+            api_key=settings.api_key,
+            base_url=OPENCODE_GO_BASE_URL,
             temperature=settings.temperature,
         )
     if settings.analyzer_kind == "mock-image":

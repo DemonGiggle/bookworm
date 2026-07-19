@@ -426,6 +426,7 @@ This makes local-model development straightforward without forcing users through
 
 - `openai`
 - `openai-compatible`
+- `opencode-go` (official OpenCode Go chat-completions endpoint; `OPENCODE_API_KEY`)
 - `ollama`
 - `mock-llm`
 
