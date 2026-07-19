@@ -121,7 +121,7 @@ bookworm digest docs/*.txt \
   --preset frontier
 ```
 
-This integration currently supports Go models served at the official OpenAI-compatible `/chat/completions` endpoint, including Grok, GLM, Kimi, DeepSeek, and MiMo models. Models currently served only through the Anthropic-style `/messages` endpoint (MiniMax and Qwen) fail early with an actionable error instead of being sent to the wrong protocol. The live model list can change; consult the official OpenCode Go documentation or its `/models` endpoint.
+This integration currently supports Go models served at the official OpenAI-compatible `/chat/completions` endpoint, including Grok, GLM, Kimi, DeepSeek, and MiMo models. Bookworm uses the Go gateway's native strict JSON Schema response mode for digest and finalization reliability. Models currently served only through the Anthropic-style `/messages` endpoint (MiniMax and Qwen) fail early with an actionable error instead of being sent to the wrong protocol. The live model list can change; consult the official OpenCode Go documentation or its `/models` endpoint.
 
 Vision-capable Go models can also analyze embedded images through the same endpoint:
 
