@@ -9,6 +9,7 @@ description = "Topic-centric document digester for multi-format sources and plug
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
+  "jsonschema>=4.21.1",
   "openai>=1.30.0",
   "openpyxl>=3.1.2",
   "Pillow>=10.4.0",

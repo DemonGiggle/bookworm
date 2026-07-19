@@ -16,8 +16,13 @@ from digester.core.models import (
 )
 from digester.providers import MockLLMProvider, ProviderSettings, create_provider
 from digester.providers.ollama_provider import OllamaProvider, _normalize_base_url
-from digester.providers.parsing import parse_finalized_topics
 from digester.providers.openai_provider import OpenAIProvider
+from digester.providers.parsing import parse_finalized_topics
+from digester.providers.schemas import (
+    DIGEST_RESPONSE_SCHEMA,
+    FINALIZE_RESPONSE_SCHEMA,
+    validate_payload,
+)
 
 
 class RecordingVerboseReporter:
@@ -39,6 +44,143 @@ class RecordingVerboseReporter:
 
     def clear(self) -> None:
         self.messages.append(("clear", ""))
+
+
+def _valid_digest_payload():
+    return {
+        "topic_updates": [],
+        "should_continue": False,
+        "rationale": "Done.",
+    }
+
+
+def _valid_finalized_payload():
+    return {
+        "topics": [
+            {
+                "slug": "overview",
+                "title": "Overview",
+                "routing_description": "Use this skill when reviewing the overview.",
+                "summary": "A complete overview summary.",
+                "key_points": ["Check the source."],
+                "workflow_notes": ["Validate before reuse."],
+                "references": [],
+            }
+        ]
+    }
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_path"),
+    [
+        (lambda payload: payload.pop("rationale"), "<root>"),
+        (lambda payload: payload.update(should_continue="false"), "should_continue"),
+        (lambda payload: payload.update(extra="unexpected"), "<root>"),
+    ],
+)
+def test_digest_schema_rejects_missing_wrong_and_extra_fields(mutate, expected_path) -> None:
+    payload = _valid_digest_payload()
+    mutate(payload)
+
+    with pytest.raises(ValueError, match="failed JSON Schema validation") as exc_info:
+        validate_payload(payload, DIGEST_RESPONSE_SCHEMA, "bookworm_digest_response")
+
+    assert expected_path in str(exc_info.value)
+
+
+def test_finalize_schema_rejects_wrong_list_item_type() -> None:
+    payload = _valid_finalized_payload()
+    payload["topics"][0]["key_points"] = ["valid", 42]
+
+    with pytest.raises(ValueError, match="topics.0.key_points.1"):
+        validate_payload(payload, FINALIZE_RESPONSE_SCHEMA, "bookworm_finalize_response")
+
+
+def test_digest_decision_rejects_string_boolean() -> None:
+    payload = _valid_digest_payload()
+    payload["should_continue"] = "false"
+
+    with pytest.raises(ValueError, match="must be a JSON boolean"):
+        DigestDecision.from_payload(payload, fallback_refs=[])
+
+
+def test_openai_retries_schema_validation_failure_and_uses_native_schema(monkeypatch) -> None:
+    provider = OpenAIProvider(model="gpt-5-nano", api_key="test-key")
+    invalid_payload = _valid_digest_payload()
+    invalid_payload["should_continue"] = "false"
+    responses = iter([invalid_payload, _valid_digest_payload()])
+    captured_calls = []
+
+    def fake_create(**kwargs):
+        captured_calls.append(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=json.dumps(next(responses)))
+                )
+            ]
+        )
+
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))
+    )
+    monkeypatch.setattr(provider, "_client", lambda: fake_client)
+
+    decision = provider.digest_batch(
+        DigestBatchRequest(
+            config=DigestConfig(),
+            batch_number=1,
+            total_batches=1,
+            chunk_batch=[],
+            current_topics=[],
+        )
+    )
+
+    assert decision.should_continue is False
+    assert len(captured_calls) == 2
+    response_format = captured_calls[0]["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
+    assert response_format["json_schema"]["schema"] == DIGEST_RESPONSE_SCHEMA
+
+
+def test_ollama_rejects_schema_invalid_retry_and_uses_native_schema(monkeypatch) -> None:
+    provider = OllamaProvider(model="gemma")
+    invalid_payload = _valid_digest_payload()
+    invalid_payload["should_continue"] = "false"
+    captured_requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return json.dumps(
+                {"message": {"content": json.dumps(invalid_payload)}}
+            ).encode("utf-8")
+
+    def fake_urlopen(request):
+        captured_requests.append(json.loads(request.data.decode("utf-8")))
+        return FakeResponse()
+
+    monkeypatch.setattr("digester.providers.ollama_provider.urlopen", fake_urlopen)
+
+    with pytest.raises(ValueError, match="should_continue"):
+        provider.digest_batch(
+            DigestBatchRequest(
+                config=DigestConfig(),
+                batch_number=1,
+                total_batches=1,
+                chunk_batch=[],
+                current_topics=[],
+            )
+        )
+
+    assert len(captured_requests) == 2
+    assert captured_requests[0]["format"] == DIGEST_RESPONSE_SCHEMA
 
 
 def test_create_provider_builds_mock_llm_provider() -> None:

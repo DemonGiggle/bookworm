@@ -228,6 +228,10 @@ class DigestDecision:
         payload: Dict[str, object],
         fallback_refs: Sequence[SourceRef],
     ) -> "DigestDecision":
+        should_continue = payload.get("should_continue")
+        if not isinstance(should_continue, bool):
+            raise ValueError("Digest payload should_continue must be a JSON boolean.")
+
         topic_updates: List[TopicDigest] = []
         raw_topics = payload.get("topic_updates", [])
         if isinstance(raw_topics, list):
@@ -268,7 +272,7 @@ class DigestDecision:
                 )
         return cls(
             topic_updates=[topic for topic in topic_updates if topic.slug and topic.title],
-            should_continue=bool(payload.get("should_continue", True)),
+            should_continue=should_continue,
             rationale=str(payload.get("rationale", "")).strip(),
         )
 

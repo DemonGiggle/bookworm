@@ -13,6 +13,11 @@ from ..core.prompts import (
 )
 from .base import LLMProvider
 from .parsing import parse_digest_decision, parse_finalized_topics
+from .schemas import (
+    DIGEST_RESPONSE_SCHEMA,
+    FINALIZE_RESPONSE_SCHEMA,
+    validate_payload,
+)
 
 
 class OpenAIProvider(LLMProvider):
@@ -116,7 +121,26 @@ class OpenAIProvider(LLMProvider):
         except Exception as error:
             self._raise_openai_error(error)
 
-    def _request_json_completion(self, system_prompt: str, user_prompt: str, temperature: float) -> str:
+    def _response_format(self, schema: Dict[str, object], schema_name: str) -> Dict[str, object]:
+        if self.base_url:
+            return {"type": "json_object"}
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name,
+                "strict": True,
+                "schema": schema,
+            },
+        }
+
+    def _request_json_completion(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        response_schema: Dict[str, object],
+        schema_name: str,
+    ) -> str:
         client = self._client()
         self._log_request("OpenAI", self.model, system_prompt, user_prompt)
         started_at = perf_counter()
@@ -128,7 +152,7 @@ class OpenAIProvider(LLMProvider):
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=temperature,
-                response_format={"type": "json_object"},
+                response_format=self._response_format(response_schema, schema_name),
             )
         except Exception as error:
             self._raise_openai_error(error)
@@ -144,19 +168,28 @@ class OpenAIProvider(LLMProvider):
         user_prompt: str,
         retry_example_payload: Optional[Dict[str, object]] = None,
         temperature: float = 0,
+        response_schema: Optional[Dict[str, object]] = None,
+        schema_name: str = "bookworm_response",
     ) -> Dict[str, object]:
+        if response_schema is None:
+            response_schema = {"type": "object"}
         content = self._request_json_completion(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             temperature=temperature,
+            response_schema=response_schema,
+            schema_name=schema_name,
         )
         try:
-            return self._parse_json_response("OpenAI", self.model, content)
+            payload = self._parse_json_response("OpenAI", self.model, content)
+            return validate_payload(payload, response_schema, schema_name)
         except ValueError as error:
-            if "invalid JSON in the model response" not in str(error):
-                raise
+            first_error = error
         self.progress_reporter.verbose(
-            "Verbose: OpenAI returned malformed JSON; retrying once with a stricter JSON-only instruction and a compact schema example."
+            (
+                "Verbose: OpenAI returned invalid structured output; retrying once with a "
+                "stricter JSON-only instruction and a compact schema example. Error: {error}"
+            ).format(error=first_error)
         )
         if retry_example_payload is None:
             retry_system_prompt = (
@@ -172,8 +205,11 @@ class OpenAIProvider(LLMProvider):
             system_prompt=retry_system_prompt,
             user_prompt=user_prompt,
             temperature=temperature,
+            response_schema=response_schema,
+            schema_name=schema_name,
         )
-        return self._parse_json_response("OpenAI", self.model, retry_content)
+        retry_payload = self._parse_json_response("OpenAI", self.model, retry_content)
+        return validate_payload(retry_payload, response_schema, schema_name)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
         payload = self._complete_json(
@@ -201,6 +237,8 @@ class OpenAIProvider(LLMProvider):
                 "rationale": "Example rationale.",
             },
             temperature=self.digest_temperature,
+            response_schema=DIGEST_RESPONSE_SCHEMA,
+            schema_name="bookworm_digest_response",
         )
         fallback_refs = [chunk.source_ref for chunk in request.chunk_batch]
         return parse_digest_decision(payload, fallback_refs=fallback_refs)
@@ -231,5 +269,7 @@ class OpenAIProvider(LLMProvider):
                 ]
             },
             temperature=self.finalize_temperature,
+            response_schema=FINALIZE_RESPONSE_SCHEMA,
+            schema_name="bookworm_finalize_response",
         )
         return parse_finalized_topics(payload, fallback_topics=topics)
