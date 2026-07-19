@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 from ..providers.base import LLMProvider
 from ..utils.progress import NoOpProgressReporter, ProgressReporter, file_label
-from .chunking import chunk_documents
+from .chunking import chunk_documents, estimate_tokens
 from .models import (
     DigestBatchRequest,
     DigestConfig,
@@ -133,6 +133,44 @@ class DigestOrchestrator:
                 self.progress_reporter.persist(reason)
             active_topic_slugs.clear()
 
+        def active_state_tokens() -> int:
+            return sum(
+                estimate_tokens(
+                    "\n".join(
+                        [
+                            topic.title,
+                            topic.routing_description,
+                            topic.summary,
+                            *topic.key_points,
+                            *topic.workflow_notes,
+                        ]
+                    )
+                )
+                for topic in topic_map.values()
+            )
+
+        def boundary_reason(batch_index: int, decision) -> Optional[str]:
+            if len(topic_map) >= self.config.max_active_topics:
+                return "active-topic-limit"
+            if active_state_tokens() >= self.config.max_active_topic_tokens:
+                return "active-token-limit"
+            next_start = (batch_index + 1) * self.config.batch_size
+            next_batch = chunks[next_start : next_start + self.config.batch_size]
+            if not next_batch:
+                return None
+            current_batch = chunks[
+                batch_index * self.config.batch_size : (batch_index + 1) * self.config.batch_size
+            ]
+            current_sources = {chunk.source_id for chunk in current_batch}
+            next_sources = {chunk.source_id for chunk in next_batch}
+            if current_sources.isdisjoint(next_sources):
+                return "source-transition"
+            current_headings = {chunk.section_heading for chunk in current_batch}
+            next_headings = {chunk.section_heading for chunk in next_batch}
+            if not decision.should_continue and current_headings.isdisjoint(next_headings):
+                return "heading-transition-with-model-advisory"
+            return None
+
         try:
             for batch_index in range(total_batches):
                 start = batch_index * self.config.batch_size
@@ -181,21 +219,20 @@ class DigestOrchestrator:
                 )
                 if topic_map and on_topics_updated is not None:
                     on_topics_updated(list(topic_map.values()))
-                if (
-                    not decision.should_continue
-                    and batch_index + 1 >= self.config.minimum_batches_before_stop
-                ):
+                reason = boundary_reason(batch_index, decision)
+                if reason and batch_index + 1 >= self.config.minimum_batches_before_stop:
                     flush_topic_cluster(
-                        "Batch {current}/{total} marked the current topic cluster as complete: {reason}".format(
+                        "boundary[{reason}] batch={current}/{total} advisory_should_continue={advisory} rationale={rationale}".format(
+                            reason=reason,
                             current=batch_index + 1,
                             total=total_batches,
-                            reason=decision.rationale
-                            or "Provider reported the visible section-like topics looked complete.",
+                            advisory=decision.should_continue,
+                            rationale=decision.rationale or "none",
                         ),
                     )
 
             self.progress_reporter.update("Finalizing topic digests.")
-            flush_topic_cluster()
+            flush_topic_cluster("boundary[end-of-corpus]")
         except Exception:
             if topic_map and on_topics_updated is not None:
                 self.progress_reporter.persist(

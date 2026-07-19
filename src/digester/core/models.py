@@ -212,6 +212,7 @@ class DigestConfig:
     minimum_batches_before_stop: int = 2
     max_batches: int = 50
     max_active_topics: int = 12
+    max_active_topic_tokens: int = 12000
     max_topics: Optional[int] = None
 
     def __post_init__(self) -> None:
@@ -221,6 +222,10 @@ class DigestConfig:
             raise ValueError("max_chunk_chars must be positive.")
         if self.batch_size <= 0:
             raise ValueError("batch_size must be positive.")
+        if self.max_active_topics <= 0:
+            raise ValueError("max_active_topics must be positive.")
+        if self.max_active_topic_tokens <= 0:
+            raise ValueError("max_active_topic_tokens must be positive.")
         if self.max_chunk_tokens is not None and self.max_chunk_tokens <= 0:
             raise ValueError("max_chunk_tokens must be positive when configured.")
         if self.context_window_tokens is not None:

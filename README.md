@@ -15,6 +15,7 @@ Generated `SKILL.md` files preserve dedicated skill-routing data instead of infe
 Before export, Bookworm validates finalized topics so weak routing text, thin workflow guidance, or missing references fail explicitly instead of quietly producing low-signal skills.
 Models cite evidence with batch-local `chunk_id` values. Bookworm resolves those IDs to canonical source paths and locators in application code, rejects unknown IDs, and never fills missing evidence by assigning every source in a batch.
 Finalization runs one topic at a time with only that topic's bounded original evidence snippets. Finalizers must preserve the canonical slug, cannot run without evidence text, and receive a hard output-token limit; successfully finalized topics are persisted before the next topic begins.
+The model's `should_continue` value is advisory only. Deterministic source/heading transitions plus enforced active-topic and active-token budgets control cluster flushing, and every flush logs a machine-readable `boundary[...]` reason. Use `--max-active-topic-tokens` to tune the active-state ceiling.
 
 By default, each run writes three directories beneath the chosen output directory:
 
