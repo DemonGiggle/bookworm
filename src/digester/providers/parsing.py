@@ -57,7 +57,7 @@ def parse_finalized_topics(
         else:
             if not isinstance(raw_chunk_ids, list):
                 raise ValueError("Finalized topic reference_chunk_ids must be a list.")
-            chunk_ids = list(
+            returned_chunk_ids = list(
                 dict.fromkeys(
                     str(chunk_id).strip()
                     for chunk_id in raw_chunk_ids
@@ -65,13 +65,21 @@ def parse_finalized_topics(
                 )
             )
             allowed_ids = set(fallback_topic.evidence_chunk_ids) if fallback_topic else set()
-            unknown_ids = [chunk_id for chunk_id in chunk_ids if chunk_id not in allowed_ids]
+            unknown_ids = [
+                chunk_id for chunk_id in returned_chunk_ids if chunk_id not in allowed_ids
+            ]
             if unknown_ids:
                 raise ValueError(
                     "Finalized topic referenced unknown chunk IDs: {ids}.".format(
                         ids=", ".join(unknown_ids)
                     )
                 )
+            chunk_ids = list(
+                dict.fromkeys(
+                    list(fallback_topic.evidence_chunk_ids if fallback_topic else [])
+                    + returned_chunk_ids
+                )
+            )
             evidence_refs = fallback_topic.evidence_refs if fallback_topic else {}
             refs = []
             for chunk_id in chunk_ids:
