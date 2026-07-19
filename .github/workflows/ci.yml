@@ -30,3 +30,6 @@ jobs:
 
       - name: Run tests
         run: python -m pytest -q
+
+      - name: Run deterministic benchmark smoke test
+        run: python -m digester.benchmark --repetitions 1 --output-dir benchmark-results

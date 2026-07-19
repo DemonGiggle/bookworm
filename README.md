@@ -158,6 +158,10 @@ Spreadsheet image extraction requires loading XLSX/XLSM workbooks in normal mode
 
 After a successful run, the CLI prints a short status report to stdout with the chunk count, configured and realized batch sizes, total chunk chars, batch count, elapsed digestion time, and generated skill count.
 
+## Reproducible benchmark
+
+Run `python -m digester.benchmark --output-dir benchmark-results` for the deterministic local-26B versus frontier-preset smoke benchmark. See `benchmarks/README.md` for real-provider candidates, corpus provenance, metrics, and result-comparison rules.
+
 ## Loop semantics
 
 The digester always keeps processing remaining chunks unless it hits `--max-batches`. The provider's `should_continue` flag is narrower: it tells the orchestrator whether the **currently visible** section-like topics likely continue into adjacent chunks, not whether the whole corpus is finished. After each batch, Bookworm rewrites the current in-progress skill files so partial progress is preserved on disk. When the provider marks the visible cluster complete, Bookworm finalizes and rewrites those topic files immediately, then continues scanning later chunks for new topics. If finalization fails, Bookworm leaves the latest in-progress files on disk before surfacing the error.

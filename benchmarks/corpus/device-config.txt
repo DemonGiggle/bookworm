@@ -1,0 +1,10 @@
+Device configuration
+
+Set the I2C bus speed to 400 kHz.
+
+[sensor]
+bus = 1
+address = 0x48
+sample_interval_ms = 250
+
+After saving the configuration, run `systemctl restart sensor-agent`. If readings disappear, restore the previous configuration and restart the service again.
