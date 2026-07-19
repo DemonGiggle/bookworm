@@ -251,6 +251,37 @@ def test_cli_reads_api_key_from_custom_environment_variable(monkeypatch, tmp_pat
     assert seen["api_key"] == "custom-key"
 
 
+def test_cli_reads_opencode_go_api_key_from_default_environment(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    seen = {}
+    monkeypatch.setenv("OPENCODE_API_KEY", "go-key")
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["provider_kind"] = settings.provider_kind
+        seen["api_key"] = settings.api_key
+        return CliFakeProvider()
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--output-dir",
+            str(tmp_path / "artifacts"),
+            "--provider-kind",
+            "opencode-go",
+            "--model",
+            "opencode-go/kimi-k3",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen == {"provider_kind": "opencode-go", "api_key": "go-key"}
+
+
 def test_cli_passes_ollama_host_and_port(monkeypatch, tmp_path: Path, capsys) -> None:
     input_path = tmp_path / "notes.txt"
     input_path.write_text("A concise document.", encoding="utf-8")

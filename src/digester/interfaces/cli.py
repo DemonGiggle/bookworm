@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     digest_parser.add_argument(
         "--provider-kind",
         default="openai",
-        choices=["openai", "openai-compatible", "ollama", "mock-llm"],
+        choices=["openai", "openai-compatible", "opencode-go", "ollama", "mock-llm"],
         help="LLM provider kind.",
     )
     digest_parser.add_argument("--model", required=True, help="Model name to invoke.")
@@ -209,7 +209,8 @@ def _resolve_api_key(args: argparse.Namespace) -> str:
 def _resolve_required_api_key(args: argparse.Namespace) -> str:
     if args.api_key_file:
         return _read_api_key_file(args.api_key_file)
-    env_var_name = args.api_key_env or "OPENAI_API_KEY"
+    default_env = "OPENCODE_API_KEY" if args.provider_kind == "opencode-go" else "OPENAI_API_KEY"
+    env_var_name = args.api_key_env or default_env
     api_key = os.getenv(env_var_name, "").strip()
     if not api_key:
         raise ValueError(

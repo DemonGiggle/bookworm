@@ -14,7 +14,8 @@ from digester.core.models import (
     SourceRef,
     TopicDigest,
 )
-from digester.providers import MockLLMProvider, ProviderSettings, create_provider
+from digester.providers import MockLLMProvider, OpenCodeGoProvider, ProviderSettings, create_provider
+from digester.providers.opencode_go_provider import OPENCODE_GO_BASE_URL
 from digester.providers.ollama_provider import OllamaProvider, _normalize_base_url
 from digester.providers.openai_provider import OpenAIProvider
 from digester.providers.parsing import parse_digest_decision, parse_finalized_topics
@@ -403,6 +404,36 @@ def test_create_provider_passes_stage_specific_temperatures() -> None:
     assert isinstance(provider, OpenAIProvider)
     assert provider.digest_temperature == 0.55
     assert provider.finalize_temperature == 0.15
+
+
+def test_create_provider_builds_opencode_go_provider_and_normalizes_model() -> None:
+    provider = create_provider(
+        ProviderSettings(
+            provider_kind="opencode-go",
+            model="opencode-go/kimi-k3",
+            api_key="go-key",
+            digest_temperature=0.2,
+            finalize_temperature=0.0,
+        )
+    )
+
+    assert isinstance(provider, OpenCodeGoProvider)
+    assert provider.model == "kimi-k3"
+    assert provider.base_url == OPENCODE_GO_BASE_URL
+    assert provider.digest_temperature == 0.2
+    assert provider.finalize_temperature == 0.0
+
+
+@pytest.mark.parametrize("model", ["qwen3.7-plus", "opencode-go/minimax-m3"])
+def test_opencode_go_rejects_messages_only_models(model) -> None:
+    with pytest.raises(ValueError, match="uses the /messages API"):
+        create_provider(
+            ProviderSettings(
+                provider_kind="opencode-go",
+                model=model,
+                api_key="go-key",
+            )
+        )
 
 
 def test_normalize_base_url_preserves_scheme_and_default_port() -> None:
