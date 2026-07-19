@@ -40,6 +40,7 @@ def create_image_analyzer(settings: ImageAnalyzerSettings) -> ImageAnalyzer:
             base_url=settings.base_url,
             organization=settings.organization,
             temperature=settings.temperature,
+            validate_model=False,
         )
     if settings.analyzer_kind == "opencode-go":
         return OpenAIImageAnalyzer(
@@ -47,6 +48,7 @@ def create_image_analyzer(settings: ImageAnalyzerSettings) -> ImageAnalyzer:
             api_key=settings.api_key,
             base_url=OPENCODE_GO_BASE_URL,
             temperature=settings.temperature,
+            validate_model=False,
         )
     if settings.analyzer_kind == "mock-image":
         return MockImageAnalyzer(model=settings.model)
