@@ -49,7 +49,9 @@ def build_digest_system_prompt() -> str:
         f"{_TOPIC_OUTPUT_CONTRACT} "
         f"{_TOPIC_QUALITY_GUIDANCE} "
         f"{_ROUTING_EXAMPLE_GUIDANCE} "
-        "Some chunks may be image-analysis content derived from embedded document images; treat those summaries and key points as grounded evidence from the cited image location, not as speculative captions. "
+        "Use topic granularity suitable for a skill registry: a short single-source, single-subject document should usually remain one cohesive skill, or at most two genuinely independent skills. "
+        "Extend a compatible current topic instead of creating a new slug for each document section. Never emit a broad overview topic alongside narrower topics that repeat the same evidence. "
+        "Split only when topics serve clearly different user intents, can stand alone, and have little content overlap. Some chunks may be image-analysis content derived from embedded document images; treat those summaries and key points as grounded evidence from the cited image location, not as speculative captions. "
         "Set should_continue only as an advisory signal: true when this batch extends active topics, false when it is internally complete or pivots away from them. Do not predict unseen chunks."
     )
 
@@ -87,6 +89,8 @@ def build_digest_user_prompt(request: DigestBatchRequest) -> str:
         "- Preserve setup sequences, hardware steps, prerequisites, commands, parameter values, safety notes, verification steps, and troubleshooting clues when present.\n"
         "- Prefer operational rules, workflow steps, constraints, examples, commands, validation checks, and failure modes over generic observations.\n"
         "- Merge overlapping ideas instead of creating duplicates.\n"
+        "- Prefer extending Current topics. Do not map headings one-to-one into new skills.\n"
+        "- For a short single-subject source, usually keep one cohesive topic; never combine an overview topic with overlapping child topics.\n"
         "- Return only chunk_id values from New chunks in this batch; use an empty list when no new chunk directly supports a topic. Existing evidence is retained by the application.\n"
         "- Favor detail that helps another engineer or agent reproduce the setup, understand the implementation, or avoid mistakes.\n"
         "- If a candidate topic is still thin, expand it with concrete evidence from this batch instead of returning a placeholder.\n"
