@@ -53,22 +53,33 @@ def score_result(result: DigestResult, expectations: Dict[str, object]) -> Dict[
     all_text = "\n".join(topic_texts)
     expected_topics = expectations.get("topics", [])
     matched_topics = 0
-    expected_sources: Set[str] = set()
-    for expected in expected_topics:
+    expected_pairs: Set[Tuple[int, str]] = set()
+    predicted_pairs: Set[Tuple[int, str]] = set()
+    matched_expected_by_topic: Dict[int, int] = {}
+    for expected_index, expected in enumerate(expected_topics):
         if not isinstance(expected, dict):
             continue
         terms = [str(term).casefold() for term in expected.get("match_any", [])]
-        if terms and any(any(term in text for term in terms) for text in topic_texts):
+        matching_indexes = [
+            index for index, text in enumerate(topic_texts) if any(term in text for term in terms)
+        ]
+        if matching_indexes:
             matched_topics += 1
-        expected_sources.update(str(value) for value in expected.get("source_paths", []))
+        for index in matching_indexes:
+            matched_expected_by_topic.setdefault(index, expected_index)
+        expected_pairs.update(
+            (expected_index, Path(str(value)).name)
+            for value in expected.get("source_paths", [])
+        )
 
     actionable = [str(value).casefold() for value in expectations.get("actionable_details", [])]
     retained_actions = sum(value in all_text for value in actionable)
-    cited_sources = {
-        Path(ref.source_path).name for topic in result.topics for ref in topic.references
-    }
-    normalized_expected_sources = {Path(value).name for value in expected_sources}
-    correct_sources = cited_sources & normalized_expected_sources
+    for topic_index, topic in enumerate(result.topics):
+        expected_index = matched_expected_by_topic.get(topic_index, -1)
+        predicted_pairs.update(
+            (expected_index, Path(ref.source_path).name) for ref in topic.references
+        )
+    correct_pairs = predicted_pairs & expected_pairs
 
     normalized_items = [
         " ".join(item.casefold().split())
@@ -87,8 +98,8 @@ def score_result(result: DigestResult, expectations: Dict[str, object]) -> Dict[
             "unsupported_claim_hits": unsupported_hits,
         },
         "provenance": {
-            "reference_precision": _ratio(len(correct_sources), len(cited_sources)),
-            "reference_recall": _ratio(len(correct_sources), len(normalized_expected_sources)),
+            "reference_precision": _ratio(len(correct_pairs), len(predicted_pairs)),
+            "reference_recall": _ratio(len(correct_pairs), len(expected_pairs)),
         },
         "stability": {
             "duplicate_item_rate": _ratio(duplicates, len(normalized_items)),
