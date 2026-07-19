@@ -85,29 +85,47 @@ class DigestOrchestrator:
         def flush_topic_cluster(reason: Optional[str] = None) -> None:
             if not topic_map:
                 return
-            finalized = self.provider.finalize_topics(list(topic_map.values()))
-            topics = validate_topics_for_export(finalized)
-            if not topics:
-                raise ValueError("The provider returned no topics for the supplied corpus.")
-            self.progress_reporter.persist(
-                "Finalized {count} topic digest(s).".format(count=len(topics))
-            )
-            if reason:
-                self.progress_reporter.persist(reason)
-            merged_topics: List[TopicDigest] = []
-            for topic in topics:
+            completed_count = 0
+            for draft_topic in list(topic_map.values()):
+                canonical_slug = draft_topic.slug
+                finalized = self.provider.finalize_topics([draft_topic])
+                topics = validate_topics_for_export(finalized)
+                if not topics:
+                    raise ValueError("The provider returned no topics for the supplied corpus.")
+                if len(topics) != 1:
+                    raise ValueError(
+                        "The provider must return exactly one finalized topic per request."
+                    )
+                topic = topics[0]
+                if topic.slug != canonical_slug:
+                    raise ValueError(
+                        "Finalizer changed canonical slug '{expected}' to '{actual}'.".format(
+                            expected=canonical_slug,
+                            actual=topic.slug,
+                        )
+                    )
                 existing_finalized = finalized_topics.get(topic.slug)
                 if existing_finalized is None:
                     finalized_topic_order.append(topic.slug)
                     finalized_topics[topic.slug] = topic
-                    merged_topics.append(topic)
-                    continue
-                existing_finalized.merge(topic)
-                existing_finalized.summary = collapse_topic_summary(existing_finalized.summary)
-                merged_topics.append(existing_finalized)
-            if on_topics_finalized is not None:
-                on_topics_finalized(merged_topics)
-            topic_map.clear()
+                    completed_topic = topic
+                else:
+                    existing_finalized.merge(topic)
+                    existing_finalized.summary = collapse_topic_summary(
+                        existing_finalized.summary
+                    )
+                    completed_topic = existing_finalized
+                if on_topics_finalized is not None:
+                    on_topics_finalized([completed_topic])
+                topic_map.pop(canonical_slug, None)
+                if canonical_slug in active_topic_slugs:
+                    active_topic_slugs.remove(canonical_slug)
+                completed_count += 1
+            self.progress_reporter.persist(
+                "Finalized {count} topic digest(s).".format(count=completed_count)
+            )
+            if reason:
+                self.progress_reporter.persist(reason)
             active_topic_slugs.clear()
 
         try:

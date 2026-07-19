@@ -389,7 +389,8 @@ def test_document_digester_persists_in_progress_topics_after_each_batch(tmp_path
     assert writer.topic_batches == [
         ["topics-chunk-1"],
         ["topics-chunk-1", "topics-chunk-2"],
-        ["topics-chunk-1", "topics-chunk-2"],
+        ["topics-chunk-1"],
+        ["topics-chunk-2"],
     ]
     assert [topic.slug for topic in result.topics] == ["topics-chunk-1", "topics-chunk-2"]
     assert (output_dir / "copilot" / ".github" / "skills" / "topics-chunk-1" / "SKILL.md").exists()
@@ -419,6 +420,45 @@ class EmptyFinalizeProvider(LLMProvider):
         return []
 
 
+class PartialFinalizeProvider(LLMProvider):
+    def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
+        topics = []
+        for index, chunk in enumerate(request.chunk_batch, start=1):
+            topics.append(
+                TopicDigest(
+                    slug="topic-{index}".format(index=index),
+                    title="Topic {index}".format(index=index),
+                    routing_description=(
+                        "Use this skill when reviewing finalized topic {index}."
+                    ).format(index=index),
+                    summary="A useful summary for finalized topic {index}.".format(
+                        index=index
+                    ),
+                    key_points=["Keep topic {index} grounded.".format(index=index)],
+                    workflow_notes=[
+                        "Validate topic {index} before reuse.".format(index=index)
+                    ],
+                    references=[chunk.source_ref],
+                )
+            )
+        return DigestDecision(
+            topic_updates=topics,
+            should_continue=False,
+            rationale="Ready to finalize both topics.",
+        )
+
+    def finalize_topics(self, topics: List[TopicDigest]) -> List[TopicDigest]:
+        if topics[0].slug == "topic-2":
+            raise ValueError("Second topic finalization failed.")
+        return topics
+
+
+class SlugChangingFinalizeProvider(PartialFinalizeProvider):
+    def finalize_topics(self, topics: List[TopicDigest]) -> List[TopicDigest]:
+        topics[0].slug = "changed-slug"
+        return topics
+
+
 def test_document_digester_keeps_in_progress_files_when_finalize_fails(tmp_path: Path) -> None:
     input_path = tmp_path / "topics.txt"
     input_path.write_text("Topic one.", encoding="utf-8")
@@ -437,6 +477,43 @@ def test_document_digester_keeps_in_progress_files_when_finalize_fails(tmp_path:
     persisted = [message for kind, message in reporter.messages if kind == "persist"]
     assert any("Persisting 1 in-progress topic digest(s)." == message for message in persisted)
     assert any("Persisting 1 in-progress topic digest(s) after an error." == message for message in persisted)
+
+
+def test_partial_finalization_persists_completed_and_remaining_topics(tmp_path: Path) -> None:
+    input_path = tmp_path / "topics.txt"
+    input_path.write_text("First topic.\n\nSecond topic.", encoding="utf-8")
+    output_dir = tmp_path / "out"
+    writer = RecordingArtifactWriter()
+
+    with pytest.raises(ValueError, match="Second topic finalization failed"):
+        DocumentDigester(
+            provider=PartialFinalizeProvider(),
+            config=DigestConfig(
+                max_chunk_chars=15,
+                batch_size=2,
+                minimum_batches_before_stop=1,
+            ),
+            artifact_writer=writer,
+        ).digest_paths([input_path], output_dir)
+
+    assert writer.topic_batches == [
+        ["topic-1", "topic-2"],
+        ["topic-1"],
+        ["topic-2"],
+    ]
+    assert (output_dir / "copilot" / ".github" / "skills" / "topic-1" / "SKILL.md").exists()
+    assert (output_dir / "copilot" / ".github" / "skills" / "topic-2" / "SKILL.md").exists()
+
+
+def test_finalizer_cannot_change_canonical_slug(tmp_path: Path) -> None:
+    input_path = tmp_path / "topic.txt"
+    input_path.write_text("Only topic.", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="changed canonical slug"):
+        DocumentDigester(
+            provider=SlugChangingFinalizeProvider(),
+            config=DigestConfig(minimum_batches_before_stop=1),
+        ).digest_paths([input_path], tmp_path / "out")
 
 
 class ReopenedTopicProvider(LLMProvider):

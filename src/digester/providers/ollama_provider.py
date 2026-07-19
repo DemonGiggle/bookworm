@@ -66,6 +66,7 @@ class OllamaProvider(LLMProvider):
         user_prompt: str,
         temperature: float,
         response_schema: Dict[str, object],
+        max_output_tokens: Optional[int] = None,
     ) -> str:
         self._log_request("Ollama", self.model, system_prompt, user_prompt)
         payload = json.dumps(
@@ -73,7 +74,10 @@ class OllamaProvider(LLMProvider):
                 "model": self.model,
                 "stream": False,
                 "format": response_schema,
-                "options": {"temperature": temperature},
+                "options": {
+                    "temperature": temperature,
+                    **({"num_predict": max_output_tokens} if max_output_tokens else {}),
+                },
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -133,6 +137,7 @@ class OllamaProvider(LLMProvider):
         temperature: float = 0,
         response_schema: Optional[Dict[str, object]] = None,
         schema_name: str = "bookworm_response",
+        max_output_tokens: Optional[int] = None,
     ) -> Dict[str, object]:
         if response_schema is None:
             response_schema = {"type": "object"}
@@ -141,6 +146,7 @@ class OllamaProvider(LLMProvider):
             user_prompt=user_prompt,
             temperature=temperature,
             response_schema=response_schema,
+            max_output_tokens=max_output_tokens,
         )
         try:
             payload = self._parse_json_response("Ollama", self.model, content)
@@ -168,6 +174,7 @@ class OllamaProvider(LLMProvider):
             user_prompt=user_prompt,
             temperature=temperature,
             response_schema=response_schema,
+            max_output_tokens=max_output_tokens,
         )
         retry_payload = self._parse_json_response("Ollama", self.model, retry_content)
         return validate_payload(retry_payload, response_schema, schema_name)
@@ -201,38 +208,50 @@ class OllamaProvider(LLMProvider):
             schema_name="bookworm_digest_response",
         )
         chunk_refs = {chunk.chunk_id: chunk.source_ref for chunk in request.chunk_batch}
-        return parse_digest_decision(payload, chunk_refs=chunk_refs)
+        chunk_texts = {chunk.chunk_id: chunk.text for chunk in request.chunk_batch}
+        return parse_digest_decision(
+            payload,
+            chunk_refs=chunk_refs,
+            chunk_texts=chunk_texts,
+        )
 
     def finalize_topics(self, topics: List[TopicDigest]) -> List[TopicDigest]:
         if not topics:
             return []
-        response_schema = schema_with_allowed_chunk_ids(
-            FINALIZE_RESPONSE_SCHEMA,
-            "topics",
-            (
-                chunk_id
-                for topic in topics
-                for chunk_id in topic.evidence_chunk_ids
-            ),
-        )
-        payload = self._complete_json(
-            system_prompt=build_finalize_system_prompt(),
-            user_prompt=build_finalize_user_prompt(topics),
-            retry_example_payload={
-                "topics": [
-                    {
-                        "slug": "example-topic",
-                        "title": "Example Topic",
-                        "routing_description": "Use this skill when reviewing the finalized example workflow.",
-                        "summary": "Summarizes the finalized example workflow and its constraints.",
-                        "key_points": ["Follow the finalized example workflow in order."],
-                        "workflow_notes": ["Validate the finalized example output before reuse."],
-                        "reference_chunk_ids": ["example-source-chunk-1"],
-                    }
-                ]
-            },
-            temperature=self.finalize_temperature,
-            response_schema=response_schema,
-            schema_name="bookworm_finalize_response",
-        )
-        return parse_finalized_topics(payload, fallback_topics=topics)
+        finalized = []
+        for topic in topics:
+            response_schema = schema_with_allowed_chunk_ids(
+                FINALIZE_RESPONSE_SCHEMA,
+                "topics",
+                topic.evidence_chunk_ids,
+            )
+            payload = self._complete_json(
+                system_prompt=build_finalize_system_prompt(),
+                user_prompt=build_finalize_user_prompt([topic]),
+                retry_example_payload={
+                    "topics": [
+                        {
+                            "slug": "example-topic",
+                            "title": "Example Topic",
+                            "routing_description": "Use this skill when reviewing the finalized example workflow.",
+                            "summary": "Summarizes the finalized example workflow and its constraints.",
+                            "key_points": ["Follow the finalized example workflow in order."],
+                            "workflow_notes": ["Validate the finalized example output before reuse."],
+                            "reference_chunk_ids": ["example-source-chunk-1"],
+                        }
+                    ]
+                },
+                temperature=self.finalize_temperature,
+                response_schema=response_schema,
+                schema_name="bookworm_finalize_response",
+                max_output_tokens=4096,
+            )
+            parsed = parse_finalized_topics(payload, fallback_topics=[topic])
+            if len(parsed) != 1 or parsed[0].slug != topic.slug:
+                raise ValueError(
+                    "Finalizer must return exactly one topic with canonical slug '{slug}'.".format(
+                        slug=topic.slug
+                    )
+                )
+            finalized.extend(parsed)
+        return finalized

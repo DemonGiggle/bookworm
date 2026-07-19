@@ -319,10 +319,13 @@ The prompt contract treats `routing_description`, `workflow_notes`, and `referen
 
 The finalization step asks the model to:
 
-- refine and compress existing topic digests
+- refine and compress one existing topic digest at a time
 - preserve factual key points
+- use only bounded original evidence snippets selected by that topic's chunk IDs
 - return a JSON object with a `topics` list suitable for reusable skill files
 - satisfy export-quality requirements for routing guidance, workflow detail, and references
+
+The prompt builder caps each finalization request at 24,000 characters, while providers cap finalization output at 4,096 tokens. Missing evidence text fails before a model call. The orchestrator also verifies that exactly one topic is returned with the unchanged canonical slug, then persists it before moving to the next topic so a later failure does not discard completed work.
 
 ### 8.3 Output Schema Expectations
 

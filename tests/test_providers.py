@@ -65,7 +65,7 @@ def _valid_finalized_payload():
                 "summary": "A complete overview summary.",
                 "key_points": ["Check the source."],
                 "workflow_notes": ["Validate before reuse."],
-                            "reference_chunk_ids": [],
+                                    "reference_chunk_ids": ["source-chunk-1"],
             }
         ]
     }
@@ -553,7 +553,7 @@ def test_ollama_provider_uses_stage_specific_temperatures(monkeypatch) -> None:
                             "summary": "Summary.",
                             "key_points": ["Point"],
                             "workflow_notes": ["Note"],
-                                "reference_chunk_ids": [],
+                            "reference_chunk_ids": ["source-chunk-1"],
                         }
                     ]
                 }
@@ -583,13 +583,21 @@ def test_ollama_provider_uses_stage_specific_temperatures(monkeypatch) -> None:
                 summary="Summary.",
                 key_points=["Point"],
                 workflow_notes=["Note"],
-                references=[],
+                references=[SourceRef("source", "/tmp/source.txt", "section 1")],
+                evidence_chunk_ids=["source-chunk-1"],
+                evidence_refs={
+                    "source-chunk-1": SourceRef(
+                        "source", "/tmp/source.txt", "section 1"
+                    )
+                },
+                evidence_texts={"source-chunk-1": "Grounded evidence."},
             )
         ]
     )
 
     assert captured_payloads[0]["options"]["temperature"] == 0.45
     assert captured_payloads[1]["options"]["temperature"] == 0.05
+    assert captured_payloads[1]["options"]["num_predict"] == 4096
 
 
 def test_ollama_provider_reports_connection_failure(monkeypatch) -> None:
@@ -610,7 +618,22 @@ def test_ollama_provider_reports_connection_failure(monkeypatch) -> None:
                     summary="Summary",
                     key_points=["Point"],
                     workflow_notes=["Re-run the provider once Ollama connectivity is restored."],
-                    references=[SourceRef(source_id="source", source_path="/tmp/source.txt", locator="full-document")],
+                    references=[
+                        SourceRef(
+                            source_id="source",
+                            source_path="/tmp/source.txt",
+                            locator="full-document",
+                        )
+                    ],
+                        evidence_chunk_ids=["source-chunk-1"],
+                        evidence_refs={
+                            "source-chunk-1": SourceRef(
+                                source_id="source",
+                                source_path="/tmp/source.txt",
+                                locator="full-document",
+                            )
+                        },
+                        evidence_texts={"source-chunk-1": "Grounded evidence."},
                 )
             ]
         )
@@ -799,7 +822,7 @@ def test_parse_finalized_topics_treats_null_routing_description_as_empty_string(
                     "summary": "Condenses the finalized source.",
                     "key_points": ["Check the finalized guidance before editing."],
                     "workflow_notes": [],
-                            "reference_chunk_ids": [],
+                    "references": [],
                 }
             ]
         }
@@ -1001,7 +1024,7 @@ def test_openai_provider_uses_stage_specific_temperatures(monkeypatch) -> None:
                         "summary": "Summary.",
                         "key_points": ["Point"],
                         "workflow_notes": ["Note"],
-                        "reference_chunk_ids": [],
+                        "reference_chunk_ids": ["source-chunk-1"],
                     }
                 ]
             }
@@ -1035,13 +1058,21 @@ def test_openai_provider_uses_stage_specific_temperatures(monkeypatch) -> None:
                 summary="Summary.",
                 key_points=["Point"],
                 workflow_notes=["Note"],
-                references=[],
+                references=[SourceRef("source", "/tmp/source.txt", "section 1")],
+                evidence_chunk_ids=["source-chunk-1"],
+                evidence_refs={
+                    "source-chunk-1": SourceRef(
+                        "source", "/tmp/source.txt", "section 1"
+                    )
+                },
+                evidence_texts={"source-chunk-1": "Grounded evidence."},
             )
         ]
     )
 
     assert captured_calls[0]["temperature"] == 0.5
     assert captured_calls[1]["temperature"] == 0.2
+    assert captured_calls[1]["max_completion_tokens"] == 4096
 
 
 def test_openai_provider_reports_invalid_json_with_context(monkeypatch) -> None:
