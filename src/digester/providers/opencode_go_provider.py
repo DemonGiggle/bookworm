@@ -56,9 +56,7 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
             digest_temperature=digest_temperature,
             finalize_temperature=finalize_temperature,
             finalize_max_output_tokens=finalize_max_output_tokens,
-            finalize_reasoning_effort=(
-                "none" if normalized_model.lower().startswith("kimi-") else None
-            ),
+            finalize_reasoning_effort=None,
             finalize_review_passes=1,
             finalize_review_model=(
                 normalize_opencode_go_model(finalize_review_model)
@@ -66,6 +64,9 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
                 else None
             ),
         )
+
+    def _finalize_reasoning_effort_for_model(self, model: str) -> str:
+        return "none" if model.lower().startswith("kimi-") else "low"
 
     def _response_format(
         self, schema: Dict[str, object], schema_name: str
