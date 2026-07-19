@@ -880,6 +880,7 @@ def test_cli_passes_stage_specific_provider_temperatures(monkeypatch, tmp_path: 
         seen["digest_temperature"] = settings.digest_temperature
         seen["finalize_temperature"] = settings.finalize_temperature
         seen["finalize_max_output_tokens"] = settings.finalize_max_output_tokens
+        seen["finalize_review_model"] = settings.finalize_review_model
         return CliFakeProvider()
 
     monkeypatch.setattr(cli, "create_provider", fake_create_provider)
@@ -898,6 +899,8 @@ def test_cli_passes_stage_specific_provider_temperatures(monkeypatch, tmp_path: 
             "0.2",
             "--finalize-max-output-tokens",
             "9000",
+            "--finalize-review-model",
+            "grok-4.5",
         ]
     )
 
@@ -907,4 +910,5 @@ def test_cli_passes_stage_specific_provider_temperatures(monkeypatch, tmp_path: 
         "digest_temperature": 0.6,
         "finalize_temperature": 0.2,
         "finalize_max_output_tokens": 9000,
+        "finalize_review_model": "grok-4.5",
     }

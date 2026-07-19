@@ -34,6 +34,7 @@ class OpenAIProvider(LLMProvider):
         finalize_max_output_tokens: int = 4096,
         finalize_reasoning_effort: Optional[str] = None,
         finalize_review_passes: int = 0,
+        finalize_review_model: Optional[str] = None,
     ) -> None:
         super().__init__()
         if not api_key:
@@ -51,6 +52,7 @@ class OpenAIProvider(LLMProvider):
         self.finalize_max_output_tokens = finalize_max_output_tokens
         self.finalize_reasoning_effort = finalize_reasoning_effort
         self.finalize_review_passes = finalize_review_passes
+        self.finalize_review_model = finalize_review_model.strip() if finalize_review_model else None
 
     def _client(self):
         from openai import OpenAI
@@ -154,13 +156,15 @@ class OpenAIProvider(LLMProvider):
         schema_name: str,
         max_output_tokens: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
+        request_model: Optional[str] = None,
     ) -> str:
         client = self._client()
-        self._log_request("OpenAI", self.model, system_prompt, user_prompt)
+        selected_model = request_model or self.model
+        self._log_request("OpenAI", selected_model, system_prompt, user_prompt)
         started_at = perf_counter()
         try:
             request_args = dict(
-                model=self.model,
+                model=selected_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -191,7 +195,7 @@ class OpenAIProvider(LLMProvider):
                     reasoning=getattr(details, "reasoning_tokens", "unknown"),
                 )
             )
-        self._log_response("OpenAI", self.model, content, perf_counter() - started_at)
+        self._log_response("OpenAI", selected_model, content, perf_counter() - started_at)
         return content
 
     def _complete_json(
@@ -204,6 +208,7 @@ class OpenAIProvider(LLMProvider):
         schema_name: str = "bookworm_response",
         max_output_tokens: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
+        request_model: Optional[str] = None,
     ) -> Dict[str, object]:
         if response_schema is None:
             response_schema = {"type": "object"}
@@ -215,9 +220,11 @@ class OpenAIProvider(LLMProvider):
             schema_name=schema_name,
             max_output_tokens=max_output_tokens,
             reasoning_effort=reasoning_effort,
+            request_model=request_model,
         )
+        selected_model = request_model or self.model
         try:
-            payload = self._parse_json_response("OpenAI", self.model, content)
+            payload = self._parse_json_response("OpenAI", selected_model, content)
             return validate_payload(payload, response_schema, schema_name)
         except ValueError as error:
             first_error = error
@@ -245,8 +252,9 @@ class OpenAIProvider(LLMProvider):
             schema_name=schema_name,
             max_output_tokens=max_output_tokens,
             reasoning_effort=reasoning_effort,
+            request_model=request_model,
         )
-        retry_payload = self._parse_json_response("OpenAI", self.model, retry_content)
+        retry_payload = self._parse_json_response("OpenAI", selected_model, retry_content)
         return validate_payload(retry_payload, response_schema, schema_name)
 
     def digest_batch(self, request: DigestBatchRequest) -> DigestDecision:
@@ -295,7 +303,7 @@ class OpenAIProvider(LLMProvider):
                 build_grounding_review_system_prompt()
                 for _ in range(self.finalize_review_passes)
             ]
-            for system_prompt in system_prompts:
+            for pass_index, system_prompt in enumerate(system_prompts):
                 response_schema = schema_with_allowed_chunk_ids(
                     FINALIZE_RESPONSE_SCHEMA,
                     "topics",
@@ -322,6 +330,9 @@ class OpenAIProvider(LLMProvider):
                     schema_name="bookworm_finalize_response",
                     max_output_tokens=self.finalize_max_output_tokens,
                     reasoning_effort=self.finalize_reasoning_effort,
+                    request_model=(
+                        self.finalize_review_model if pass_index > 0 else None
+                    ),
                 )
                 parsed = parse_finalized_topics(payload, fallback_topics=[candidate])
                 if len(parsed) != 1 or parsed[0].slug != topic.slug:

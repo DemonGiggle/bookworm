@@ -36,6 +36,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="LLM provider kind.",
     )
     digest_parser.add_argument("--model", required=True, help="Model name to invoke.")
+    digest_parser.add_argument(
+        "--finalize-review-model",
+        help="Optional second model that audits finalized topics against their evidence.",
+    )
     credential_parser = digest_parser.add_mutually_exclusive_group()
     credential_parser.add_argument(
         "--api-key-file",
@@ -363,6 +367,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 digest_temperature=args.digest_temperature,
                 finalize_temperature=args.finalize_temperature,
                 finalize_max_output_tokens=args.finalize_max_output_tokens,
+                finalize_review_model=args.finalize_review_model,
             )
         )
         image_analyzer = _resolve_image_analyzer(args)
