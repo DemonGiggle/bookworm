@@ -460,9 +460,11 @@ def test_opencode_go_uses_distinct_model_for_grounding_review(monkeypatch) -> No
         finalize_review_model="grok-4.5",
     )
     request_models = []
+    reasoning_efforts = []
 
     def fake_complete_json(**kwargs):
         request_models.append(kwargs.get("request_model"))
+        reasoning_efforts.append(kwargs.get("reasoning_effort"))
         return {
             "topics": [
                 {
@@ -500,6 +502,52 @@ def test_opencode_go_uses_distinct_model_for_grounding_review(monkeypatch) -> No
     )
 
     assert request_models == [None, "grok-4.5"]
+    assert reasoning_efforts == ["none", "low"]
+
+
+def test_opencode_go_uses_low_reasoning_for_grok_and_glm_review(monkeypatch) -> None:
+    provider = OpenCodeGoProvider(
+        model="grok-4.5",
+        api_key="go-key",
+        finalize_review_model="glm-5.2",
+    )
+    reasoning_efforts = []
+
+    def fake_complete_json(**kwargs):
+        reasoning_efforts.append(kwargs.get("reasoning_effort"))
+        return {
+            "topics": [
+                {
+                    "slug": "overview",
+                    "title": "Overview",
+                    "routing_description": "Use this skill when reviewing grounded guidance.",
+                    "summary": "Grounded summary.",
+                    "key_points": ["Grounded point."],
+                    "workflow_notes": ["Grounded note."],
+                    "reference_chunk_ids": ["source-chunk-1"],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(provider, "_complete_json", fake_complete_json)
+    source_ref = SourceRef("source", "/tmp/source.txt", "full-document")
+    provider.finalize_topics(
+        [
+            TopicDigest(
+                slug="overview",
+                title="Overview",
+                routing_description="Use this skill when reviewing draft guidance.",
+                summary="Draft summary.",
+                key_points=["Draft point."],
+                references=[source_ref],
+                evidence_chunk_ids=["source-chunk-1"],
+                evidence_refs={"source-chunk-1": source_ref},
+                evidence_texts={"source-chunk-1": "Grounded source text."},
+            )
+        ]
+    )
+
+    assert reasoning_efforts == ["low", "low"]
 
 
 def test_opencode_go_retries_one_transient_upstream_failure(monkeypatch) -> None:
@@ -537,13 +585,13 @@ def test_opencode_go_does_not_retry_unrelated_bad_request(monkeypatch) -> None:
         provider._request_json_completion(system_prompt="system", user_prompt="user")
 
     assert len(attempts) == 1
-    assert provider.finalize_reasoning_effort == "none"
+    assert provider._finalize_reasoning_effort_for_model("kimi-k2.6") == "none"
 
 
-def test_non_kimi_opencode_go_does_not_force_reasoning_effort() -> None:
+def test_non_kimi_opencode_go_uses_low_finalization_reasoning() -> None:
     provider = OpenCodeGoProvider(model="deepseek-v4-pro", api_key="go-key")
 
-    assert provider.finalize_reasoning_effort is None
+    assert provider._finalize_reasoning_effort_for_model("deepseek-v4-pro") == "low"
 
 
 def test_kimi_reasoning_effort_is_limited_only_for_finalization(monkeypatch) -> None:

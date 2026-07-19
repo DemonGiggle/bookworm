@@ -147,6 +147,9 @@ class OpenAIProvider(LLMProvider):
             },
         }
 
+    def _finalize_reasoning_effort_for_model(self, model: str) -> Optional[str]:
+        return self.finalize_reasoning_effort
+
     def _request_json_completion(
         self,
         system_prompt: str,
@@ -329,7 +332,11 @@ class OpenAIProvider(LLMProvider):
                     response_schema=response_schema,
                     schema_name="bookworm_finalize_response",
                     max_output_tokens=self.finalize_max_output_tokens,
-                    reasoning_effort=self.finalize_reasoning_effort,
+                    reasoning_effort=self._finalize_reasoning_effort_for_model(
+                        self.finalize_review_model
+                        if pass_index > 0 and self.finalize_review_model
+                        else self.model
+                    ),
                     request_model=(
                         self.finalize_review_model if pass_index > 0 else None
                     ),
