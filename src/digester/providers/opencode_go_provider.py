@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Dict
+
 from .openai_compatible import OpenAICompatibleProvider
 
 
@@ -53,3 +55,15 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
             finalize_temperature=finalize_temperature,
             finalize_max_output_tokens=finalize_max_output_tokens,
         )
+
+    def _response_format(
+        self, schema: Dict[str, object], schema_name: str
+    ) -> Dict[str, object]:
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name,
+                "strict": True,
+                "schema": schema,
+            },
+        }

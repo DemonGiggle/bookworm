@@ -17,6 +17,7 @@ from digester.core.models import (
 from digester.providers import MockLLMProvider, OpenCodeGoProvider, ProviderSettings, create_provider
 from digester.providers.opencode_go_provider import OPENCODE_GO_BASE_URL
 from digester.providers.ollama_provider import OllamaProvider, _normalize_base_url
+from digester.providers.openai_compatible import OpenAICompatibleProvider
 from digester.providers.openai_provider import OpenAIProvider
 from digester.providers.parsing import parse_digest_decision, parse_finalized_topics
 from digester.providers.schemas import (
@@ -426,6 +427,39 @@ def test_create_provider_builds_opencode_go_provider_and_normalizes_model() -> N
     assert provider.digest_temperature == 0.2
     assert provider.finalize_temperature == 0.0
     assert provider.finalize_max_output_tokens == 8192
+
+
+def test_opencode_go_uses_strict_json_schema_output() -> None:
+    provider = OpenCodeGoProvider(model="kimi-k2.6", api_key="go-key")
+    schema = {
+        "type": "object",
+        "properties": {"ok": {"type": "boolean"}},
+        "required": ["ok"],
+        "additionalProperties": False,
+    }
+
+    response_format = provider._response_format(schema, "probe")
+
+    assert response_format == {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "probe",
+            "strict": True,
+            "schema": schema,
+        },
+    }
+
+
+def test_generic_openai_compatible_keeps_json_object_output() -> None:
+    provider = OpenAICompatibleProvider(
+        model="compatible-model",
+        api_key="test-key",
+        base_url="https://compatible.example/v1",
+    )
+
+    assert provider._response_format({"type": "object"}, "probe") == {
+        "type": "json_object"
+    }
 
 
 @pytest.mark.parametrize("model", ["Qwen3.7-Plus", "opencode-go/MiniMax-M3"])
