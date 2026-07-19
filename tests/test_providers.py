@@ -448,6 +448,86 @@ def test_opencode_go_uses_strict_json_schema_output() -> None:
             "schema": schema,
         },
     }
+    assert provider.finalize_reasoning_effort == "low"
+
+
+def test_non_kimi_opencode_go_does_not_force_reasoning_effort() -> None:
+    provider = OpenCodeGoProvider(model="deepseek-v4-pro", api_key="go-key")
+
+    assert provider.finalize_reasoning_effort is None
+
+
+def test_kimi_reasoning_effort_is_limited_only_for_finalization(monkeypatch) -> None:
+    provider = OpenCodeGoProvider(model="kimi-k2.6", api_key="go-key")
+    captured_calls = []
+
+    def fake_create(**kwargs):
+        captured_calls.append(kwargs)
+        payload = (
+            {"topic_updates": [], "should_continue": False, "rationale": "Done."}
+            if len(captured_calls) == 1
+            else {
+                "topics": [
+                    {
+                        "slug": "overview",
+                        "title": "Overview",
+                        "routing_description": "Use this skill when reviewing grounded guidance.",
+                        "summary": "A grounded final summary with actionable implementation detail.",
+                        "key_points": ["Follow the documented sequence."],
+                        "workflow_notes": ["Validate the result against source evidence."],
+                        "reference_chunk_ids": ["source-chunk-1"],
+                    }
+                ]
+            }
+        )
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(content=json.dumps(payload)),
+                )
+            ]
+        )
+
+    monkeypatch.setattr(
+        provider,
+        "_client",
+        lambda: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))
+        ),
+    )
+    provider.digest_batch(
+        DigestBatchRequest(
+            config=DigestConfig(),
+            batch_number=1,
+            total_batches=1,
+            chunk_batch=[],
+            current_topics=[],
+        )
+    )
+    provider.finalize_topics(
+        [
+            TopicDigest(
+                slug="overview",
+                title="Overview",
+                routing_description="Use this skill when reviewing grounded guidance.",
+                summary="A grounded draft summary.",
+                key_points=["Follow the documented sequence."],
+                workflow_notes=["Validate against the source."],
+                references=[SourceRef("source", "/tmp/source.txt", "section 1")],
+                evidence_chunk_ids=["source-chunk-1"],
+                evidence_refs={
+                    "source-chunk-1": SourceRef(
+                        "source", "/tmp/source.txt", "section 1"
+                    )
+                },
+                evidence_texts={"source-chunk-1": "Grounded evidence."},
+            )
+        ]
+    )
+
+    assert "reasoning_effort" not in captured_calls[0]
+    assert captured_calls[1]["reasoning_effort"] == "low"
 
 
 def test_generic_openai_compatible_keeps_json_object_output() -> None:

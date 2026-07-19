@@ -31,6 +31,7 @@ class OpenAIProvider(LLMProvider):
         digest_temperature: float = 0.4,
         finalize_temperature: float = 0.1,
         finalize_max_output_tokens: int = 4096,
+        finalize_reasoning_effort: Optional[str] = None,
     ) -> None:
         super().__init__()
         if not api_key:
@@ -44,6 +45,7 @@ class OpenAIProvider(LLMProvider):
         self.digest_temperature = digest_temperature
         self.finalize_temperature = finalize_temperature
         self.finalize_max_output_tokens = finalize_max_output_tokens
+        self.finalize_reasoning_effort = finalize_reasoning_effort
 
     def _client(self):
         from openai import OpenAI
@@ -146,6 +148,7 @@ class OpenAIProvider(LLMProvider):
         response_schema: Dict[str, object],
         schema_name: str,
         max_output_tokens: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> str:
         client = self._client()
         self._log_request("OpenAI", self.model, system_prompt, user_prompt)
@@ -163,6 +166,8 @@ class OpenAIProvider(LLMProvider):
             if max_output_tokens is not None:
                 output_key = "max_tokens" if self.base_url else "max_completion_tokens"
                 request_args[output_key] = max_output_tokens
+            if reasoning_effort is not None:
+                request_args["reasoning_effort"] = reasoning_effort
             response = client.chat.completions.create(**request_args)
         except Exception as error:
             self._raise_openai_error(error)
@@ -193,6 +198,7 @@ class OpenAIProvider(LLMProvider):
         response_schema: Optional[Dict[str, object]] = None,
         schema_name: str = "bookworm_response",
         max_output_tokens: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
     ) -> Dict[str, object]:
         if response_schema is None:
             response_schema = {"type": "object"}
@@ -203,6 +209,7 @@ class OpenAIProvider(LLMProvider):
             response_schema=response_schema,
             schema_name=schema_name,
             max_output_tokens=max_output_tokens,
+            reasoning_effort=reasoning_effort,
         )
         try:
             payload = self._parse_json_response("OpenAI", self.model, content)
@@ -232,6 +239,7 @@ class OpenAIProvider(LLMProvider):
             response_schema=response_schema,
             schema_name=schema_name,
             max_output_tokens=max_output_tokens,
+            reasoning_effort=reasoning_effort,
         )
         retry_payload = self._parse_json_response("OpenAI", self.model, retry_content)
         return validate_payload(retry_payload, response_schema, schema_name)
@@ -302,6 +310,7 @@ class OpenAIProvider(LLMProvider):
                 response_schema=response_schema,
                 schema_name="bookworm_finalize_response",
                 max_output_tokens=self.finalize_max_output_tokens,
+                reasoning_effort=self.finalize_reasoning_effort,
             )
             parsed = parse_finalized_topics(payload, fallback_topics=[topic])
             if len(parsed) != 1 or parsed[0].slug != topic.slug:
