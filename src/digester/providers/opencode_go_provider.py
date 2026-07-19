@@ -55,7 +55,7 @@ class OpenCodeGoProvider(OpenAICompatibleProvider):
             finalize_temperature=finalize_temperature,
             finalize_max_output_tokens=finalize_max_output_tokens,
             finalize_reasoning_effort=(
-                "low" if normalized_model.lower().startswith("kimi-") else None
+                "none" if normalized_model.lower().startswith("kimi-") else None
             ),
         )
 

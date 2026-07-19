@@ -448,7 +448,7 @@ def test_opencode_go_uses_strict_json_schema_output() -> None:
             "schema": schema,
         },
     }
-    assert provider.finalize_reasoning_effort == "low"
+    assert provider.finalize_reasoning_effort == "none"
 
 
 def test_non_kimi_opencode_go_does_not_force_reasoning_effort() -> None:
@@ -527,7 +527,7 @@ def test_kimi_reasoning_effort_is_limited_only_for_finalization(monkeypatch) -> 
     )
 
     assert "reasoning_effort" not in captured_calls[0]
-    assert captured_calls[1]["reasoning_effort"] == "low"
+    assert captured_calls[1]["reasoning_effort"] == "none"
 
 
 def test_generic_openai_compatible_keeps_json_object_output() -> None:
