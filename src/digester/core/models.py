@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Callable, Dict, Iterable, List, Optional, Sequence
 
 
 def _dedupe_preserve_order(items: Iterable[str]) -> List[str]:
@@ -204,6 +204,10 @@ class TopicDigest:
 @dataclass
 class DigestConfig:
     max_chunk_chars: int = 1800
+    max_chunk_tokens: Optional[int] = None
+    context_window_tokens: Optional[int] = None
+    reserved_context_tokens: int = 4096
+    token_counter: Optional[Callable[[str], int]] = field(default=None, repr=False)
     batch_size: int = 2
     minimum_batches_before_stop: int = 2
     max_batches: int = 50
@@ -213,6 +217,23 @@ class DigestConfig:
     def __post_init__(self) -> None:
         if self.max_topics is not None:
             self.max_active_topics = self.max_topics
+        if self.max_chunk_chars <= 0:
+            raise ValueError("max_chunk_chars must be positive.")
+        if self.batch_size <= 0:
+            raise ValueError("batch_size must be positive.")
+        if self.max_chunk_tokens is not None and self.max_chunk_tokens <= 0:
+            raise ValueError("max_chunk_tokens must be positive when configured.")
+        if self.context_window_tokens is not None:
+            available = self.context_window_tokens - self.reserved_context_tokens
+            if available <= 0:
+                raise ValueError("reserved_context_tokens must be smaller than the context window.")
+            per_chunk = available // self.batch_size
+            if per_chunk <= 0:
+                raise ValueError("Context budget is too small for the configured batch size.")
+            if self.max_chunk_tokens is None:
+                self.max_chunk_tokens = per_chunk
+            else:
+                self.max_chunk_tokens = min(self.max_chunk_tokens, per_chunk)
 
 
 @dataclass

@@ -107,6 +107,7 @@ If `--ollama-port` is omitted, the CLI defaults to port `11434`.
 Use `--verbose` or `-v` to print organized, truncated request and response previews, total character counts, and round-trip timing for each model call, including embedded image analyzer calls.
 Use `--vv` to log the full request and response bodies without omitting the middle.
 Use `--log-location stdio|/path/to/bookworm.log` to keep logs on stdio or write them to a file. The default is `stdio`.
+Use `--max-chunk-tokens` to enforce a conservative token-aware hard limit. Optionally set `--context-window-tokens` and `--reserved-context-tokens`; Bookworm reserves prompt/output space and divides the remaining content budget across the batch. `--max-chunk-chars` remains a compatibility ceiling and oversized paragraphs, code, tables, OCR, and unbroken text are now hard-split.
 Bookworm supplies explicit JSON Schemas to OpenAI and Ollama and validates every digest and finalize response locally. OpenAI-compatible endpoints retain JSON-object mode because schema support varies, but their responses receive the same local validation. Missing fields, extra fields, and wrong types (including string values such as `"false"` for `should_continue`) trigger one constrained retry; an invalid retry fails explicitly. If a model still fails, reduce `--batch-size`, `--max-chunk-chars`, or `--max-active-topics`, or choose a model with better structured-output reliability.
 
 ## MockLLM example

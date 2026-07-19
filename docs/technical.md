@@ -132,6 +132,10 @@ The `merge()` method merges topic updates from successive LLM iterations by:
 `DigestConfig` controls throughput and coverage:
 
 - `max_chunk_chars`
+- `max_chunk_tokens`
+- `context_window_tokens`
+- `reserved_context_tokens`
+- `token_counter` (programmatic custom tokenizer hook)
 - `batch_size`
 - `minimum_batches_before_stop`
 - `max_batches`
@@ -228,23 +232,25 @@ Chunking is implemented in `src/digester/core/chunking.py`.
 For each section:
 
 1. Split content on blank lines into paragraph-like units
-2. Accumulate paragraphs until `max_chunk_chars` would be exceeded
-3. Flush the current chunk
-4. Continue until the section is exhausted
+2. Measure both configured character and token budgets
+3. Hard-split any oversized paragraph, code block, table text, OCR block, or unbroken string
+4. Accumulate bounded units until either limit would be exceeded
+5. Flush the current chunk and continue until the section is exhausted
 
 ### 6.2 Properties
 
 - Keeps semantic paragraphs together when possible
+- Enforces the configured hard token limit using a supplied tokenizer or a conservative UTF-8 estimator
 - Preserves a stable source reference at the chunk level
 - Produces predictable chunk identifiers such as `source-id-chunk-3`
 
 ### 6.3 Current Tradeoffs
 
-- Character count is used instead of tokenizer-aware token count
+- The default estimator uses UTF-8 bytes divided by three; pass a model-specific `token_counter` for exact accounting
 - Tables represented as line-oriented text may not preserve all spreadsheet semantics
 - Cross-section balancing is not attempted
 
-These are acceptable v1 tradeoffs because the architecture keeps chunking isolated and easy to replace.
+`context_window_tokens` optionally derives a per-chunk limit after subtracting `reserved_context_tokens` and dividing the remainder across the configured batch size. Existing `max_chunk_chars` behavior remains available as a compatibility ceiling; `--max-chunk-tokens` enables model-aware sizing from the CLI.
 
 ## 7. Digest Orchestration Loop
 

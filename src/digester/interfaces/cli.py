@@ -115,6 +115,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sampling temperature for image-analysis generation.",
     )
     digest_parser.add_argument("--max-chunk-chars", type=int, default=1800)
+    digest_parser.add_argument("--max-chunk-tokens", type=int)
+    digest_parser.add_argument("--context-window-tokens", type=int)
+    digest_parser.add_argument("--reserved-context-tokens", type=int, default=4096)
     digest_parser.add_argument("--batch-size", type=int, default=2)
     digest_parser.add_argument("--minimum-batches-before-stop", type=int, default=2)
     digest_parser.add_argument("--max-batches", type=int, default=50)
@@ -304,6 +307,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             provider=provider,
             config=DigestConfig(
                 max_chunk_chars=args.max_chunk_chars,
+                max_chunk_tokens=args.max_chunk_tokens,
+                context_window_tokens=args.context_window_tokens,
+                reserved_context_tokens=args.reserved_context_tokens,
                 batch_size=args.batch_size,
                 minimum_batches_before_stop=args.minimum_batches_before_stop,
                 max_batches=args.max_batches,
