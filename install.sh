@@ -232,6 +232,6 @@ fi
 note "Installation complete"
 printf '%s\n' "Bookworm command: $INSTALLED_COMMAND"
 if [ -n "${HOME:-}" ]; then
-  printf '%s\n' "Optional config: $HOME/.local/bookworm/config.toml"
+  printf '%s\n' "Optional config: $HOME/.config/bookworm/config.toml"
 fi
 printf '%s\n' "Try: bookworm digest <inputs> --output-dir out --model <model>"

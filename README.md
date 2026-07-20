@@ -103,11 +103,11 @@ bookworm digest docs/*.txt \
 
 ## Configuration file
 
-Bookworm reads optional defaults from `~/.local/bookworm/config.toml`. Create the directory and file first:
+Bookworm reads optional defaults from `~/.config/bookworm/config.toml`. Create the directory and file first:
 
 ```bash
-mkdir -p ~/.local/bookworm
-${EDITOR:-vi} ~/.local/bookworm/config.toml
+mkdir -p ~/.config/bookworm
+${EDITOR:-vi} ~/.config/bookworm/config.toml
 ```
 
 Put CLI option names under the `[digest]` table using snake_case. The following is a complete example for OpenCode Go text and embedded-image digestion. It is valid as written; remove settings you do not need and adjust model, path, and limit values for your workload. See the [configuration reference](docs/configuration.md) for every setting, default, provider-specific behavior, and preset value.
@@ -129,7 +129,7 @@ finalize_review_model = "grok-4.5"
 # Primary credential source. Use api_key_file instead, not in addition, when
 # credentials are stored in a file.
 api_key_env = "OPENCODE_API_KEY"
-# api_key_file = "/home/you/.local/bookworm/opencode.key"
+# api_key_file = "/home/you/.config/bookworm/opencode.key"
 
 # Used by openai-compatible providers. OpenCode Go selects its URL itself.
 base_url = ""
@@ -150,7 +150,7 @@ image_temperature = 0.0
 # Optional image-specific credentials. These are useful when the image analyzer
 # differs from the primary provider. Omit both to reuse the applicable default.
 image_api_key_env = "OPENCODE_API_KEY"
-# image_api_key_file = "/home/you/.local/bookworm/image-provider.key"
+# image_api_key_file = "/home/you/.config/bookworm/image-provider.key"
 
 # Stage-specific generation settings. These override the selected preset.
 digest_temperature = 0.1

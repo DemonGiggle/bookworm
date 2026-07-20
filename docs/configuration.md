@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Bookworm reads optional defaults from `~/.local/bookworm/config.toml`. All settings belong in a single `[digest]` table and use the snake_case form of their CLI option names.
+Bookworm reads optional defaults from `~/.config/bookworm/config.toml`. All settings belong in a single `[digest]` table and use the snake_case form of their CLI option names.
 
 ```toml
 [digest]
@@ -21,7 +21,7 @@ bookworm digest docs/
 Settings resolve in this order, from highest to lowest priority:
 
 1. Explicit command-line options
-2. Values in `~/.local/bookworm/config.toml`
+2. Values in `~/.config/bookworm/config.toml`
 3. Supported environment-backed defaults
 4. The selected preset and built-in defaults
 
@@ -78,7 +78,7 @@ Example using a protected key file:
 
 ```toml
 [digest]
-api_key_file = "/home/you/.local/bookworm/opencode.key"
+api_key_file = "/home/you/.config/bookworm/opencode.key"
 ```
 
 Use only one member of each `*_key_env`/`*_key_file` pair.

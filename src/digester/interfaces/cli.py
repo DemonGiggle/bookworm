@@ -22,7 +22,7 @@ from .api import DocumentDigester
 
 
 def _config_path() -> Path:
-    return Path.home() / ".local" / "bookworm" / "config.toml"
+    return Path.home() / ".config" / "bookworm" / "config.toml"
 
 
 def build_parser() -> argparse.ArgumentParser:
