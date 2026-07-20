@@ -72,6 +72,35 @@ bookworm digest docs/*.txt \
   --max-active-topics 16
 ```
 
+## Configuration file
+
+Bookworm reads optional defaults from `~/.local/bookworm/config.toml`. Put CLI option names under the `[digest]` table using snake_case. Positional input paths remain command-line arguments. Explicit command-line options take precedence over the configuration file; configuration values take precedence over environment-backed and built-in defaults.
+
+```toml
+[digest]
+output_dir = "out"
+provider_kind = "opencode-go"
+model = "kimi-k2.6"
+preset = "frontier"
+api_key_env = "OPENCODE_API_KEY"
+max_active_topics = 8
+recursive = true
+```
+
+With that file, a run can be shortened to:
+
+```bash
+bookworm digest docs/
+```
+
+Flags override individual settings for one run:
+
+```bash
+bookworm digest docs/ --model kimi-k3 --output-dir alternate-out
+```
+
+Unknown sections, unknown setting names, invalid value types, and mutually exclusive settings fail with a configuration error. Store credential environment-variable names or key-file paths in the file rather than raw API keys.
+
 You can also keep the key in a file and point the CLI at it:
 
 ```bash

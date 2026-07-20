@@ -10,6 +10,11 @@ from digester.providers.base import LLMProvider
 from digester.utils.progress import ConsoleProgressReporter
 
 
+@pytest.fixture(autouse=True)
+def isolate_default_config(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(cli, "_config_path", lambda: tmp_path / "config.toml")
+
+
 class CliFakeProvider(LLMProvider):
     def __init__(self) -> None:
         self.validation_calls = 0
@@ -84,6 +89,161 @@ def test_cli_digest_command(monkeypatch, tmp_path: Path, capsys) -> None:
     assert "Completed batch 1/1; tracking 1 topic(s)." in captured.err
     assert "Finished digestion with 1 skill file(s)." in captured.err
     assert "Generated" in captured.err
+
+
+def test_cli_reads_digest_defaults_from_toml(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    output_dir = tmp_path / "configured-output"
+    (tmp_path / "config.toml").write_text(
+        "\n".join(
+            [
+                "[digest]",
+                'provider_kind = "mock-llm"',
+                'model = "configured-model"',
+                'output_dir = "{output_dir}"'.format(output_dir=output_dir),
+                'preset = "frontier"',
+                "batch_size = 1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    seen = {}
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["provider_kind"] = settings.provider_kind
+        seen["model"] = settings.model
+        return CliFakeProvider()
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+
+    exit_code = cli.main(["digest", str(input_path)])
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen == {"provider_kind": "mock-llm", "model": "configured-model"}
+    assert (output_dir / "codex" / ".agents" / "skills" / "summary" / "SKILL.md").exists()
+
+
+def test_cli_flags_override_toml_settings(monkeypatch, tmp_path: Path, capsys) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    configured_output = tmp_path / "configured-output"
+    cli_output = tmp_path / "cli-output"
+    (tmp_path / "config.toml").write_text(
+        "\n".join(
+            [
+                "[digest]",
+                'provider_kind = "mock-llm"',
+                'model = "configured-model"',
+                'output_dir = "{output_dir}"'.format(output_dir=configured_output),
+                "batch_size = 1",
+                "verbose = true",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    seen = {}
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["model"] = settings.model
+        return CliFakeProvider()
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+
+    exit_code = cli.main(
+        [
+            "digest",
+            str(input_path),
+            "--model",
+            "cli-model",
+            "--output-dir",
+            str(cli_output),
+            "--batch-size",
+            "2",
+            "--vv",
+        ]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen["model"] == "cli-model"
+    assert not configured_output.exists()
+    assert (cli_output / "codex" / ".agents" / "skills" / "summary" / "SKILL.md").exists()
+
+
+def test_cli_rejects_unknown_toml_setting(tmp_path: Path, capsys) -> None:
+    (tmp_path / "config.toml").write_text(
+        "[digest]\nmodle = \"typo\"\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit):
+        cli.main(["digest", "notes.txt"])
+
+    assert "Unknown digest setting(s)" in capsys.readouterr().err
+
+
+def test_cli_rejects_invalid_toml_value_type(tmp_path: Path, capsys) -> None:
+    (tmp_path / "config.toml").write_text(
+        "[digest]\nbatch_size = \"two\"\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit):
+        cli.main(["digest", "notes.txt"])
+
+    assert "digest.batch_size must be an integer" in capsys.readouterr().err
+
+
+def test_cli_credential_flag_overrides_toml_credential_source(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    input_path = tmp_path / "notes.txt"
+    input_path.write_text("A concise document.", encoding="utf-8")
+    configured_key = tmp_path / "configured.key"
+    configured_key.write_text("configured-key\n", encoding="utf-8")
+    (tmp_path / "config.toml").write_text(
+        "\n".join(
+            [
+                "[digest]",
+                'model = "configured-model"',
+                'output_dir = "{output_dir}"'.format(output_dir=tmp_path / "output"),
+                'api_key_file = "{key_file}"'.format(key_file=configured_key),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BOOKWORM_TEST_KEY", "cli-key")
+    seen = {}
+
+    def fake_create_provider(settings: ProviderSettings):
+        seen["api_key"] = settings.api_key
+        return CliFakeProvider()
+
+    monkeypatch.setattr(cli, "create_provider", fake_create_provider)
+
+    exit_code = cli.main(
+        ["digest", str(input_path), "--api-key-env", "BOOKWORM_TEST_KEY"]
+    )
+
+    capsys.readouterr()
+    assert exit_code == 0
+    assert seen["api_key"] == "cli-key"
+
+
+def test_cli_requires_model_when_not_configured(tmp_path: Path, capsys) -> None:
+    with pytest.raises(SystemExit):
+        cli.main(
+            [
+                "digest",
+                "notes.txt",
+                "--output-dir",
+                str(tmp_path / "output"),
+            ]
+        )
+
+    assert "requires --model or digest.model" in capsys.readouterr().err
 
 
 def test_cli_rejects_text_only_image_analyzer(tmp_path: Path) -> None:
