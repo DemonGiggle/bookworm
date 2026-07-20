@@ -74,20 +74,78 @@ bookworm digest docs/*.txt \
 
 ## Configuration file
 
-Bookworm reads optional defaults from `~/.local/bookworm/config.toml`. Put CLI option names under the `[digest]` table using snake_case. Positional input paths remain command-line arguments. Explicit command-line options take precedence over the configuration file; configuration values take precedence over environment-backed and built-in defaults.
+Bookworm reads optional defaults from `~/.local/bookworm/config.toml`. Create the directory and file first:
+
+```bash
+mkdir -p ~/.local/bookworm
+${EDITOR:-vi} ~/.local/bookworm/config.toml
+```
+
+Put CLI option names under the `[digest]` table using snake_case. The following is a complete example for OpenCode Go text and embedded-image digestion. It is valid as written; remove settings you do not need and adjust model, path, and limit values for your workload. See the [configuration reference](docs/configuration.md) for every setting, default, provider-specific behavior, and preset value.
 
 ```toml
 [digest]
-output_dir = "out"
+# General input and output behavior. Input paths remain CLI arguments.
+output_dir = "./out"
+recursive = true
+
+# Named defaults for context, chunking, temperatures, and finalization limits.
+preset = "frontier"
+
+# Primary text provider.
 provider_kind = "opencode-go"
 model = "kimi-k2.6"
-preset = "frontier"
+finalize_review_model = "grok-4.5"
+
+# Primary credential source. Use api_key_file instead, not in addition, when
+# credentials are stored in a file.
 api_key_env = "OPENCODE_API_KEY"
+# api_key_file = "/home/you/.local/bookworm/opencode.key"
+
+# Used by openai-compatible providers. OpenCode Go selects its URL itself.
+base_url = ""
+organization = ""
+
+# Ollama connection defaults, used when a provider or image analyzer is Ollama.
+ollama_host = "127.0.0.1"
+ollama_port = 11434
+timeout_sc = 120
+
+# Embedded-image analysis. The analyzer can use openai, openai-compatible,
+# opencode-go, ollama, or mock-image.
+image_analyzer_kind = "opencode-go"
+image_analyzer_model = "kimi-k2.6"
+image_capability = "vision"
+image_temperature = 0.0
+
+# Optional image-specific credentials. These are useful when the image analyzer
+# differs from the primary provider. Omit both to reuse the applicable default.
+image_api_key_env = "OPENCODE_API_KEY"
+# image_api_key_file = "/home/you/.local/bookworm/image-provider.key"
+
+# Stage-specific generation settings. These override the selected preset.
+digest_temperature = 0.1
+finalize_temperature = 0.1
+finalize_max_output_tokens = 8192
+
+# Chunking and context limits. Integer values are TOML numbers, not strings.
+max_chunk_chars = 1800
+max_chunk_tokens = 1024
+context_window_tokens = 131072
+reserved_context_tokens = 16384
+batch_size = 2
+minimum_batches_before_stop = 2
+max_batches = 50
 max_active_topics = 8
-recursive = true
+max_active_topic_tokens = 32768
+
+# Logging. verbose and vv are mutually exclusive when either is true.
+verbose = false
+vv = false
+log_location = "stdio"
 ```
 
-With that file, a run can be shortened to:
+Positional input paths are deliberately not stored in the file. With this configuration, a run can be shortened to:
 
 ```bash
 bookworm digest docs/
@@ -99,7 +157,7 @@ Flags override individual settings for one run:
 bookworm digest docs/ --model kimi-k3 --output-dir alternate-out
 ```
 
-Unknown sections, unknown setting names, invalid value types, and mutually exclusive settings fail with a configuration error. Store credential environment-variable names or key-file paths in the file rather than raw API keys.
+Unknown sections, unknown setting names, invalid value types, and mutually exclusive settings fail with a configuration error. `api_key_env`/`api_key_file`, `image_api_key_env`/`image_api_key_file`, and `verbose`/`vv` are mutually exclusive pairs. Store credential environment-variable names or key-file paths in the file rather than raw API keys.
 
 You can also keep the key in a file and point the CLI at it:
 
