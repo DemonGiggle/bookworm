@@ -6,7 +6,12 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Optional, Sequence, TextIO, Tuple
+from typing import Dict, Optional, Sequence, TextIO, Tuple
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.8-3.10
+    import tomli as tomllib
 
 from ..core import DigestConfig
 from ..core.presets import PRESETS, resolve_preset
@@ -14,6 +19,10 @@ from ..images import ImageAnalyzer, ImageAnalyzerSettings, create_image_analyzer
 from ..providers import ProviderSettings, create_provider
 from ..utils.progress import ConsoleProgressReporter
 from .api import DocumentDigester
+
+
+def _config_path() -> Path:
+    return Path.home() / ".local" / "bookworm" / "config.toml"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,14 +37,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Recursively scan nested directories when an input path is a directory.",
     )
-    digest_parser.add_argument("--output-dir", required=True, help="Directory for markdown outputs.")
+    digest_parser.add_argument("--output-dir", help="Directory for markdown outputs.")
     digest_parser.add_argument(
         "--provider-kind",
         default="openai",
         choices=["openai", "openai-compatible", "opencode-go", "ollama", "mock-llm"],
         help="LLM provider kind.",
     )
-    digest_parser.add_argument("--model", required=True, help="Model name to invoke.")
+    digest_parser.add_argument("--model", help="Model name to invoke.")
     digest_parser.add_argument(
         "--finalize-review-model",
         help="Optional second model that audits finalized topics against their evidence.",
@@ -157,6 +166,127 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum number of recent section-like topics to include in each provider prompt.",
     )
     return parser
+
+
+def _digest_subparser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return action.choices["digest"]
+    raise RuntimeError("Digest subparser is not configured.")
+
+
+def _normalize_config_value(
+    key: str, value: object, action: argparse.Action
+) -> object:
+    if isinstance(action, argparse._StoreTrueAction):
+        if type(value) is not bool:
+            raise ValueError("digest.{key} must be a boolean.".format(key=key))
+        return value
+    if action.type is int:
+        if type(value) is not int:
+            raise ValueError("digest.{key} must be an integer.".format(key=key))
+        normalized = value
+    elif action.type is float:
+        if type(value) not in {int, float}:
+            raise ValueError("digest.{key} must be a number.".format(key=key))
+        normalized = float(value)
+    else:
+        if not isinstance(value, str):
+            raise ValueError("digest.{key} must be a string.".format(key=key))
+        normalized = value
+    if action.choices is not None and normalized not in action.choices:
+        raise ValueError(
+            "digest.{key} must be one of: {choices}.".format(
+                key=key,
+                choices=", ".join(str(choice) for choice in action.choices),
+            )
+        )
+    return normalized
+
+
+def _load_config(parser: argparse.ArgumentParser) -> Dict[str, object]:
+    path = _config_path()
+    if not path.exists():
+        return {}
+    try:
+        with path.open("rb") as stream:
+            document = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise ValueError(
+            "Unable to read {path}: {error}".format(path=path, error=error)
+        ) from error
+    unknown_sections = sorted(set(document) - {"digest"})
+    if unknown_sections:
+        raise ValueError(
+            "Unknown configuration section(s) in {path}: {sections}.".format(
+                path=path,
+                sections=", ".join(unknown_sections),
+            )
+        )
+    digest_config = document.get("digest", {})
+    if not isinstance(digest_config, dict):
+        raise ValueError(
+            "The digest configuration in {path} must be a table.".format(path=path)
+        )
+
+    digest_parser = _digest_subparser(parser)
+    actions = {
+        action.dest: action
+        for action in digest_parser._actions
+        if action.dest not in {"help", "inputs"}
+    }
+    unknown_keys = sorted(set(digest_config) - set(actions))
+    if unknown_keys:
+        raise ValueError(
+            "Unknown digest setting(s) in {path}: {settings}.".format(
+                path=path,
+                settings=", ".join(unknown_keys),
+            )
+        )
+    normalized = {
+        key: _normalize_config_value(key, value, actions[key])
+        for key, value in digest_config.items()
+    }
+    for first, second in (
+        ("api_key_file", "api_key_env"),
+        ("image_api_key_file", "image_api_key_env"),
+        ("verbose", "vv"),
+    ):
+        if normalized.get(first) and normalized.get(second):
+            raise ValueError(
+                "digest.{first} and digest.{second} are mutually exclusive.".format(
+                    first=first, second=second
+                )
+            )
+    return normalized
+
+
+def _option_was_passed(argv: Sequence[str], *options: str) -> bool:
+    return any(
+        argument in options
+        or any(
+            argument.startswith(option + "=")
+            for option in options
+            if option.startswith("--")
+        )
+        for argument in argv
+    )
+
+
+def _apply_mutually_exclusive_cli_overrides(
+    args: argparse.Namespace, argv: Sequence[str]
+) -> None:
+    groups = (
+        (("--api-key-file",), "api_key_file", "api_key_env"),
+        (("--api-key-env",), "api_key_env", "api_key_file"),
+        (("--image-api-key-file",), "image_api_key_file", "image_api_key_env"),
+        (("--image-api-key-env",), "image_api_key_env", "image_api_key_file"),
+        (("--verbose", "-v"), "verbose", "vv"),
+        (("--vv",), "vv", "verbose"),
+    )
+    for options, _selected, other in groups:
+        if _option_was_passed(argv, *options):
+            setattr(args, other, False if other in {"verbose", "vv"} else None)
 
 
 def _provider_message(args: argparse.Namespace) -> str:
@@ -316,9 +446,28 @@ def _status_report(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    try:
+        config = _load_config(parser)
+    except ValueError as error:
+        parser.error(str(error))
+    _digest_subparser(parser).set_defaults(**config)
+    effective_argv = list(argv) if argv is not None else sys.argv[1:]
+    args = parser.parse_args(effective_argv)
+    _apply_mutually_exclusive_cli_overrides(args, effective_argv)
     if args.command != "digest":
         parser.error("Unknown command.")
+    if not args.output_dir:
+        parser.error(
+            "digest requires --output-dir or digest.output_dir in {path}.".format(
+                path=_config_path()
+            )
+        )
+    if not args.model:
+        parser.error(
+            "digest requires --model or digest.model in {path}.".format(
+                path=_config_path()
+            )
+        )
 
     preset = resolve_preset(
         args.preset,
