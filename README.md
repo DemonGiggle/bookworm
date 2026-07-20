@@ -52,6 +52,35 @@ Bookworm's Python package dependencies are installed from `pyproject.toml`. Embe
   - Inkscape 1.x style: `inkscape input.emf --export-type=png --export-filename=output.png`
 - ImageMagick is used only as a fallback (`magick` or `convert`). ImageMagick 6/7 must be built with an EMF/WMF-capable delegate for these previews; many Linux builds cannot decode EMF by default.
 
+## Installation
+
+Bookworm requires Python 3.8 or newer. On Linux, macOS, WSL, or another Unix-like environment with Bash, run the installer from any working directory:
+
+```bash
+/path/to/bookworm/install.sh
+```
+
+The installer creates an isolated virtual environment at `.venv`, installs Bookworm and its runtime dependencies, and copies the `bookworm` launcher to `~/.local/bin`. If `~/.local/bin` is not already on `PATH`, the installer prints the exact shell-profile line to add.
+
+The installer is safe to rerun when upgrading the checkout. If an existing virtual environment has neither `pip` nor `ensurepip`, the installer preserves it as a timestamped `.bookworm-backup-*` directory and rebuilds the environment with the selected Python. Common overrides are:
+
+```bash
+PYTHON=python3.12 ./install.sh              # choose a Python interpreter
+VENV_DIR="$HOME/.local/share/bookworm/venv" ./install.sh
+INSTALL_BIN_DIR="$HOME/bin" ./install.sh   # choose the launcher directory
+INSTALL_LAUNCHER=0 ./install.sh            # keep the command only in .venv/bin
+RUN_TESTS=1 ./install.sh                    # install dev dependencies and run tests
+```
+
+Native Windows Command Prompt and PowerShell cannot execute Bash scripts directly. Run `install.sh` under WSL or Git Bash. A native PowerShell installation uses the same isolated-package approach:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
+.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\bookworm.exe --help
+```
+
 ## Provider model
 
 - `openai`: hosted OpenAI models

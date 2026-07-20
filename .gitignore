@@ -9,6 +9,8 @@ build/
 *.egg
 .env
 .venv
+.venv.bookworm-backup-*/
+.venv.bookworm-failed-*/
 venv/
 *.swp
 .codex

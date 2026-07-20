@@ -33,3 +33,38 @@ jobs:
 
       - name: Run deterministic benchmark smoke test
         run: python -m digester.benchmark --repetitions 1 --output-dir benchmark-results
+
+  installer-smoke:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Run installer from outside the repository
+        shell: bash
+        run: |
+          cd "${RUNNER_TEMP}"
+          PYTHON=python \
+            VENV_DIR="${RUNNER_TEMP}/bookworm-installer-venv" \
+            INSTALL_BIN_DIR="${RUNNER_TEMP}/bookworm-installer-bin" \
+            "${GITHUB_WORKSPACE}/install.sh"
+
+      - name: Verify installed command
+        shell: bash
+        run: |
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            "${RUNNER_TEMP}/bookworm-installer-bin/bookworm.exe" --help
+          else
+            "${RUNNER_TEMP}/bookworm-installer-bin/bookworm" --help
+          fi
